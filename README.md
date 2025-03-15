@@ -14,13 +14,22 @@ When using ReShade, most effects, one way or another, increase global contrast. 
 This serves as a potential fix, inspired by a traditional Photoshop method, used widely in one way or another.
 
 HOW IT WORKS:
+
   Step 1: Convert to linear to make sure everything is mixed correctly
+  
   Step 2: Very scary looking blur
+  
   Step 3: Use a multiply mix to combine a muted version of the image with the original, based on a single blurred channel, or luminance.
 
 HOW TO USE:
+
   This is a suggestion for your workflow.
+  
   Step 1: Enable the shader, and put it after your DoFs and lightning / depth-dependant shaders.
+  
   Step 2: Switch the mix source until it looks fitting. Green works fine, luma works whenever others might now, although this might depend on the scene
+  
   Step 3: Tone it up or down, based on taste and desired result
+  
   Step 4 (in here for newbies): Do not touch the blur, unless it is too small, and you see halos.
+  

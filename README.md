@@ -21,6 +21,8 @@ HOW IT WORKS:
   
   Step 3: Use a multiply mix to combine a muted version of the image with the original, based on a single blurred channel, or luminance.
 
+
+
 HOW TO USE:
 
   This is a suggestion for your workflow.

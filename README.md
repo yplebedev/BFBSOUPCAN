@@ -5,7 +5,8 @@ COMMUNITY DEACHRONYMS:
   None. YET.
 
 SHADERS USED: Before/After, UjelHDR, SoupCanAdapt.
-![20241F~1](https://github.com/user-attachments/assets/b99b6114-23a8-413d-8c0e-bedc0f6b5bbb)
+![207243~1](https://github.com/user-attachments/assets/4b7e4d0c-ed71-4361-8710-e2261a91a5ca)
+
 
 SoupCanAdapt:
 An adaptation shader that makes your dark-er screenshots less dark. TO BE CLEAR, this IS exposure fusion, but NOT done in the same way as Marty's or Zenteon's is.

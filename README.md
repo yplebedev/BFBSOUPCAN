@@ -35,3 +35,5 @@ HOW TO USE:
   
   Step 4 (in here for newbies): Do not touch the blur, unless it is too small, and you see halos.
   
+SoupCanTraceRTGI:
+  WARNING: NOT EVEN REMOTELY FINISHED. HERE FOR CODE HISTORY.

@@ -32,6 +32,7 @@ float getAdapt(float4 blurred) {
 		case (2): return blurred.b;
 		case (3): return dot(blurred.rgb, lumaCoeff);
 	}
+	return blurred.g;
 }
 
 float4 main(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {

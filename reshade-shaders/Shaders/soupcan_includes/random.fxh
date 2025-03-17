@@ -32,7 +32,7 @@ float randomValue(inout uint seed) {
     return result/4294967295.0;
 }
 
-float3 randomTriple(float2 coords, in out uint seed) {
+float3 randomTriple(in out uint seed) {
 	float3 v = 0;
 	v.x = randomValue(seed);
 	v.y = randomValue(seed);
@@ -45,7 +45,7 @@ float boxmuller(float r0, float r1) {
 }
 
 float3 randomGauss3(float2 coords, in out uint seed) {
-	float3 r = randomTriple(coords, seed);
+	float3 r = randomTriple(seed);
 	float ox = boxmuller(r.x, r.y);
 	float oy = boxmuller(r.x, r.z);
 	float oz = boxmuller(r.z, r.y);

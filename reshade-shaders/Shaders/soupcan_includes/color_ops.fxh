@@ -4,6 +4,7 @@
 
 #define lumaCoeff float3(0.2126, 0.7152, 0.0722)
 #define gamma 2.2
+#define hdr_modifier 3.0
 
 float4 sRGBtoLinear(float4 s) {
 	return pow(s, gamma);
@@ -58,4 +59,12 @@ float3 lrgb2oklab(float3 col) {
 //with alpha copy
 float4 lrgb2oklab(float4 col) {
     return float4(lrgb2oklab(col.rgb), col.a);
+}
+
+float max3(float x, float y, float z) {
+	return max(x, max(y, z)); 
+}
+
+float4 inverseTonemapLottes(float4 col) {
+	return col * rcp(max(1.0 - max3(col.r, col.g, col.b) * hdr_modifier / 10, 0.1));
 }

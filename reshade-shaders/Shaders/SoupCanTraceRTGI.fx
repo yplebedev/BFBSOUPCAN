@@ -21,6 +21,7 @@ uniform int steps <ui_type = "slider"; ui_min = 0.0; ui_max = 10.0;> = 10;
 uniform float thickness <ui_type = "slider"; ui_min = 0.0; ui_max = 10.0;> = 0.01;
 uniform float range <ui_type = "slider"; ui_min = 0.0; ui_max = 10.0;> = 1.0;
 uniform float strength <ui_type = "slider"; ui_min = 0.0; ui_max = 10.0;> = 4.0;
+uniform float maxRange <ui_type = "slider"; ui_min = 0.0; ui_max = 10.0;> = 4.0;
 uniform bool debug <> = false;
 
 //uniform float3 lightPos <> = float3(0.0, 0.0, 0.0);
@@ -30,11 +31,13 @@ uniform int framecount < source = "framecount"; >;
 
 
 
-float4 calculateLighting(float3 normal, float3 pos, float3 lightPos, float4 color) {
+float4 calculateLighting(float3 normal, float3 pos, float3 lightPos, float4 color, float3 normalAtSampled, float2 texcoord) {
 	float3 toLight = lightPos - pos;
 	float dist = length(toLight);
+	if (dist > maxRange) return 0; 
 	float light = max(dot(normalize(toLight), normal), 0.0) / (dist * dist + 1.0) * strength;
-	float3 colored = color.rgb * light;
+	float weight = saturate(dot(normalAtSampled, normal));
+	float3 colored = color.rgb * light * weight;
 	return float4(colored, color.a);
 }
 
@@ -49,15 +52,16 @@ float4 main(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
 	float3 pos = getWorldPosition(texcoord, depth);
 	
 	float2 randF2 = float2(randomValue(ss), randomValue(ss2));
-	float2 samplePos2D = float2(randF2.x * cos(randF2.y), randF2.y * cos(randF2.x));
-	float3 samplePos3D = getWorldPosition(samplePos2D, GetDepth(samplePos2D + texcoord));
+	float3 normalAtSampled = GetWorldSpaceNormal(randF2);
+	float3 samplePos3D = getWorldPosition(randF2, GetDepth(randF2));
 	
-	float4 light = calculateLighting(-normal, pos, samplePos3D, sampleBBlin(samplePos2D + texcoord));
+	float4 light = calculateLighting(-normal, pos, samplePos3D, inverseTonemapLottes(sampleBBlin(randF2)), normalAtSampled, texcoord);
 	if (!debug) {
 		float4 x = linearTosRGB(saturate(input * light) * strength + input);
-		return x / (x + 1);
+		return x;
+		//return x / (x + 1);
 	}
-	return linearTosRGB(light + 0.5);
+	return linearTosRGB(light + 0.01);
 }
 
 technique SoupCanTraceRTGI {

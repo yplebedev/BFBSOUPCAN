@@ -66,5 +66,9 @@ float max3(float x, float y, float z) {
 }
 
 float4 inverseTonemapLottes(float4 col) {
-	return col * rcp(max(1.0 - max3(col.r, col.g, col.b) * hdr_modifier / 10, 0.1));
+	return col * rcp(max(1.0 - max3(col.r, col.g, col.b) * 4 / 10, 0.1));
+}
+
+float4 tonemapLottes(float4 c) {
+	return c * rcp(max3(c.r, c.g, c.b) + 1.0);
 }

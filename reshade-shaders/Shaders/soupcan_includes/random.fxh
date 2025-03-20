@@ -4,18 +4,10 @@
 #define PI 3.1515
 #define PHI 1.6180339887
 
-float halton(int b, int i) {
-	float result = 0.;
-	float f = 1.;
-	while (i > 0)
-	{
-		f = f / float(b);
-		result += f * float(i % b);
-		i = i / b; 
-        //index = int(floor(float(index) / float(base)));
-	}
-	return result;
-}
+#define g_lds 1.32471795724474602596
+#define a1_lds 1.0 / g_lds
+#define a2_lds 1.0 / (g_lds * g_lds)
+
 
 uniform int random_value < source = "random"; min = 0; max = 4000; >;
 
@@ -23,6 +15,10 @@ uniform int random_value < source = "random"; min = 0; max = 4000; >;
 int getPixelIndex(float2 coords, int2 size) {
     int2 pxCoords = coords*size;
     return pxCoords.x+pxCoords.y*size.x+random_value;
+}
+
+int getPixelID(float2 intPos) {
+	return intPos.x + (intPos.y * BUFFER_WIDTH);
 }
 
 float randomValue(inout uint seed) {
@@ -57,4 +53,14 @@ float3 randomVec3(float2 coords, in out uint seed) {
 		float3 rng = randomGauss3(coords, seed);
 		if (length(rng) <= 1.0) return normalize(rng);
 	}
+}
+
+float2 goldenRatio(int n) {
+	for (int i = 0; i < 1000; i++) {
+		float2 candidate = ((0.5 + a1_lds * n) % 1.0, (0.5 + a2_lds * n) % 1.0);
+		if (candidate.x > BUFFER_RCP_WIDTH) continue;
+		if (candidate.y > BUFFER_RCP_HEIGHT) continue;
+		return candidate;
+	}
+	return 1;
 }

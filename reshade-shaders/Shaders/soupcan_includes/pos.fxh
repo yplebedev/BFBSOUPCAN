@@ -24,7 +24,7 @@ float3 GetScreenSpaceNormal(float2 texcoord) {
     float3 vertNorth  = float3(posNorth - 0.5,  1) * ReShade::GetLinearizedDepth(posNorth);
     float3 vertEast   = float3(posEast - 0.5,   1) * ReShade::GetLinearizedDepth(posEast);
 
-    return normalize(cross(vertCenter - vertNorth, vertCenter - vertEast));
+    return normalize(cross(vertNorth - vertCenter, vertCenter - vertEast));
 }
 
 float3 GetWorldSpaceNormal(float2 texcoord) {

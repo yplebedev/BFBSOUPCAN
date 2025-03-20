@@ -13,7 +13,13 @@
 #define twoPi 6.28318530718
 #define halfPi 1.57079632679
 
-#define RENDER_SCALE 0.5
+#ifndef RENDER_SCALE
+	#define RENDER_SCALE 0.5
+#endif
+
+#ifndef SOUPCANGI_SPP
+	#define SOUPCANGI_SPP 1
+#endif
 
 //#define stepwidth ReShade::PixelSize
 
@@ -75,17 +81,23 @@ float4 main(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
 	float3 normal = -GetWorldSpaceNormal(texcoord);
 	float3 pos = getWorldPosition(texcoord, depth);
 	
-	float2 randF2 = goldenRatio(ss);
-	float3 normalAtSampled = GetWorldSpaceNormal(randF2);
-	float3 samplePos3D = getWorldPosition(randF2, GetDepth(randF2));
-	
-	float4 light = calculateLighting(normal, pos, samplePos3D, inverseTonemapLottes(sampleBBlin(randF2)), normalAtSampled, texcoord);
-	return light;
+	float4 light = 0;
+	[unroll]
+	for (int i = 0; i < SOUPCANGI_SPP; i++) {
+		//float2 randF2 = goldenRatio(ss);
+		float2 randF2 = randomValue(ss);
+		float3 normalAtSampled = GetWorldSpaceNormal(randF2);
+		float3 samplePos3D = getWorldPosition(randF2, GetDepth(randF2));
+		
+		light += calculateLighting(normal, pos, samplePos3D, inverseTonemapLottes(sampleBBlin(randF2)), normalAtSampled, texcoord);
+	}
+	return light / SOUPCANGI_SPP;
 }
 
 float4 upscale(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
 // https://jo.dreggn.org/home/2010_atrous.pdf
-	float4 noisy = tex2D(intermediateLightSampler, texcoord * RENDER_SCALE);
+	float4 noisy = tex2D(intermediateLightSampler, texcoord);
+	float4 bb = inverseTonemapLottes(sRGBtoLinear(tex2Dfetch(ReShade::BackBuffer, vpos.xy)));
 	float3 normal = GetWorldSpaceNormal(texcoord);
 	float depth = GetDepth(texcoord);
 	if (1.0 - depth < 0.00001) return 0;
@@ -96,6 +108,7 @@ float4 upscale(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Targe
 	
 	
 	float cum_w = 0.0;
+	[unroll]
 	for (int i = 0; i < 25; i++) {
 		float2 uv = texcoord + offset[i] * step * stepwidth;
 		
@@ -121,7 +134,9 @@ float4 upscale(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Targe
 		cum_w += weight * kernel[i];
 	}
 	
-	return sum/cum_w;
+	float4 light = sum/cum_w;
+	if (debug) return tonemapLottes(light);
+	return linearTosRGB(tonemapLottes(light * bb + bb));
 }
 
 

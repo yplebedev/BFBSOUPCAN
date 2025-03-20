@@ -56,11 +56,6 @@ float3 randomVec3(float2 coords, in out uint seed) {
 }
 
 float2 goldenRatio(int n) {
-	for (int i = 0; i < 1000; i++) {
-		float2 candidate = ((0.5 + a1_lds * n) % 1.0, (0.5 + a2_lds * n) % 1.0);
-		if (candidate.x > BUFFER_RCP_WIDTH) continue;
-		if (candidate.y > BUFFER_RCP_HEIGHT) continue;
-		return candidate;
-	}
-	return 1;
+	float2 candidate = ((0.5 + a1_lds * n) % 1.0, (0.5 + a2_lds * n) % 1.0);
+	return (candidate % ReShade::ScreenSize) * ReShade::ScreenSize;
 }

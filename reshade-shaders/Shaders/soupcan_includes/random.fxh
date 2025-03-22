@@ -21,7 +21,7 @@ int getPixelID(float2 intPos) {
 	return intPos.x + (intPos.y * BUFFER_WIDTH);
 }
 
-float randomValue(inout uint seed) {
+float randomValue(uint seed) {
     seed = seed * 747796405 + 2891336453;
     uint result = ((seed>>((seed>>28)+4))^seed)*277803737;
     result = (result>>22)^result;
@@ -56,6 +56,15 @@ float3 randomVec3(float2 coords, in out uint seed) {
 }
 
 float2 goldenRatio(int n) {
-	float2 candidate = ((0.5 + a1_lds * n) % 1.0, (0.5 + a2_lds * n) % 1.0);
-	return (candidate % ReShade::ScreenSize) * ReShade::ScreenSize;
+	while (true) {
+		float2 candidate = ((0.5 + a1_lds * n) % 1.0, (0.5 + a2_lds * n) % 1.0);
+		// x is always normalized
+		if (candidate.y > BUFFER_RCP_HEIGHT) n += 1; 
+		else return candidate * BUFFER_ASPECT_RATIO; 
+	}
+}
+
+// modified/ported from marty's shadertoy
+float2 r2_modified(in float idx, in float2 seed) {
+    return frac(seed + float(idx) * float2(0.245122333753, 0.430159709002));
 }

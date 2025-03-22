@@ -38,5 +38,6 @@ HOW TO USE:
 SoupCanTraceRTGI:
   WARNING: NOT EVEN REMOTELY FINISHED. HERE FOR CODE HISTORY AND PLAYTESTING. Updates in the discord server!
 
-  ![cachedImage](https://github.com/user-attachments/assets/eae9042a-778f-45a4-8ae0-8a0cd57550d4)
+![cachedImage](https://github.com/user-attachments/assets/81fd0891-934e-40ea-81c0-22027f4378e3)
+
 

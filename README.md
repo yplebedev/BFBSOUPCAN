@@ -9,7 +9,7 @@ SHADERS USED: Before/After, UjelHDR, SoupCanAdapt.
 
 
 SoupCanAdapt:
-An adaptation shader that makes your dark-er screenshots less dark. TO BE CLEAR, this IS exposure fusion, but NOT done in the same way as Marty's or Zenteon's is.
+An adaptation shader that makes your dark-er screenshots less dark. TO BE CLEAR, this IS (debatably, gamma fusion would be more correct) exposure fusion, but NOT done in the same way as Marty's or Zenteon's is.
 When using ReShade, most effects, one way or another, increase global contrast. Not only is this a problem with "tonemapping" and "HDR" shaders like mine, but with even less realized effects, like AO and SSGI. Naturally, his becomes a problem if not fixed. Lowering the contrast naïvely does fix the issue, but it lowers LOCAL contrast, and that is usually desired, if not outright intentionally added.
 This serves as a potential fix, inspired by a traditional Photoshop method, used widely in one way or another.
 
@@ -38,5 +38,6 @@ HOW TO USE:
 SoupCanTraceRTGI:
   WARNING: NOT EVEN REMOTELY FINISHED. HERE FOR CODE HISTORY AND PLAYTESTING. Updates in the discord server!
 
-  ![cachedImage](https://github.com/user-attachments/assets/eae9042a-778f-45a4-8ae0-8a0cd57550d4)
+![cachedImage](https://github.com/user-attachments/assets/81fd0891-934e-40ea-81c0-22027f4378e3)
+
 

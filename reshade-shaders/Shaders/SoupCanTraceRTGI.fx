@@ -8,6 +8,7 @@
 #include "soupcan_includes/random.fxh"
 #include "soupcan_includes/pos.fxh"
 #include "soupcan_includes/color_ops.fxh"
+#include "soupcan_includes/ATSS.fxh"
 
 #define BUFFER_SIZE int2(BUFFER_WIDTH,BUFFER_HEIGHT)
 #define NOISE_TEX_NAME "QuarkBN_SOUPGI.png"
@@ -31,29 +32,34 @@ sampler sbn { Texture = bn; };
 	#define SOUPCANGI_SPP 1
 #endif
 
+#ifndef SOUPCAN_DO_TAA
+	#define SOUPCAN_DO_TAA true
+#endif
+
+texture lightingCache { Width = BUFFER_WIDTH * RENDER_SCALE; Height = BUFFER_HEIGHT * RENDER_SCALE; Format = RGBA16F; };
+sampler sLCache { Texture = lightingCache; };
+
 texture DN0 { Width = BUFFER_WIDTH * RENDER_SCALE; Height = BUFFER_HEIGHT * RENDER_SCALE; Format = RGBA16F; };
 texture DN1 { Width = BUFFER_WIDTH * RENDER_SCALE; Height = BUFFER_HEIGHT * RENDER_SCALE; Format = RGBA16F; };
 
 sampler SDN0 { Texture = DN0; };
 sampler SDN1 { Texture = DN1; };
 
-float4 sampleBBlin(float2 texcoord) {
-	return sRGBtoLinear(tex2D(ReShade::BackBuffer, texcoord));
-}
 
-uniform float strength <ui_type = "slider"; ui_min = 0.0; ui_max = 10.0;> = 4.0;
+uniform float strength <ui_type = "slider"; ui_min = 0.0; ui_max = 4.0;> = 0.4;
 uniform bool debug <> = false;
 
-//uniform float3 lightPos <> = float3(0.0, 0.0, 0.0);
 
 uniform int framecount < source = "framecount"; >;
 
 texture intermediateLight { Width = BUFFER_WIDTH * RENDER_SCALE; Height = BUFFER_HEIGHT * RENDER_SCALE; Format = RGBA16F; };
 sampler intermediateLightSampler { Texture = intermediateLight; };
 
-uniform float c_phi <ui_type = "slider"; ui_min = 0.1; ui_max = 10.0;> = 0.1;
+uniform float c_phi <ui_type = "slider"; ui_min = 0.1; ui_max = 10.0;> = 1.0;
 uniform float n_phi <ui_type = "slider"; ui_min = 0.1; ui_max = 10.0;> = 0.275;
 uniform float p_phi <ui_type = "slider"; ui_min = 0.1; ui_max = 10.0;> = 0.161;
+
+uniform float attenuation <ui_type = "slider"; ui_min = 0.001; ui_max = 10.0;> = 0.1;
 
 uniform float kernel[25] <ui_title = "GAUSS WHEIGHTS - DO NOT EDIT";> = {
     1.0/256.0, 1.0/64.0,  3.0/128.0, 1.0/64.0,  1.0/256.0,
@@ -71,21 +77,28 @@ uniform float2 offset[25] <ui_title = "OFFSETS - DO NOT EDIT";> = {
 };
 
 
-// ToDo: ???? major refactor in order, this is about as clean as ZN's first repo lmao.
-float4 calculateLighting(float3 normal, float3 pos, float3 lightPos, float4 color, float3 normalAtSampled, float2 texcoord) {
+float4 calculateLighting(float3 normal, float3 pos, float3 lightPos, float4 color, float3 normalAtSampled, float2 texcoord, float4 vpos) {
 	float3 toLight = lightPos - pos;
 	float3 fromLight = normalize(-toLight);
 	float dist = length(toLight);
-	float light = max(dot(normalize(toLight), normal), 0.0) / (dist * dist * 0.01 + 1.0) * strength;
-	//light /= dot(pos, pos);
+	float light = max(dot(normalize(toLight), normal), 0.0) / (dist * dist * attenuation + 1.0) * strength;
 	light *= dot(lightPos, lightPos);
 	float weight = saturate(dot(-normalAtSampled, fromLight));
 	float3 colored = color.rgb * light * weight;
 	return float4(colored, color.a);
 }
 
+float4 inject(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
+	float depth = ReShade::GetLinearizedDepth(texcoord);
+	if (1.0 - depth < 0.00001) return 0;		
+	float4 previous = tex2Dfetch(intermediateLightSampler, vpos.xy / RENDER_SCALE);
+	float4 result = inverseTonemapLottes(tex2Dfetch(ReShade::BackBuffer, vpos.xy / RENDER_SCALE));
+	result.a = 1.0;
+	return result * previous + result;
+}
+
 float4 main(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
-	float4 input = inverseTonemapLottes(sampleBBlin(texcoord));
+	float4 input = inverseTonemapLottes(tex2Dfetch(ReShade::BackBuffer, vpos.xy));
 	float depth = GetDepth(texcoord);
 	if (1.0 - depth < 0.00001) return linearTosRGB(input);
 	float3 normal = -GetWorldSpaceNormal(texcoord);
@@ -95,11 +108,10 @@ float4 main(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
 	float4 light = 0;
 	[unroll]
 	for (int i = 0; i < SOUPCANGI_SPP; i++) {
-		float2 randF2 = r2_modified(i, seed);
+		float2 randF2 = r2_modified(i + (framecount % 1024) * SOUPCANGI_SPP, seed);
 		float3 normalAtSampled = GetWorldSpaceNormal(randF2);
 		float3 samplePos3D = getWorldPosition(randF2, GetDepth(randF2));
-		
-		light += calculateLighting(normal, pos, samplePos3D, inverseTonemapLottes(sampleBBlin(randF2)), normalAtSampled, texcoord);
+		light += calculateLighting(normal, pos, samplePos3D, inverseTonemapLottes(tex2D(sLCache, randF2)), normalAtSampled, texcoord, vpos);
 	}
 	return light / SOUPCANGI_SPP;
 }
@@ -119,7 +131,7 @@ float4 upscale(float4 vpos, float2 texcoord, sampler s, float level) {
 	float cum_w = 0.0;
 	[unroll]
 	for (int i = 0; i < 25; i++) {
-		float2 uv = texcoord + offset[i] * step * exp2(level);
+		float2 uv = texcoord + offset[i] * step * exp2(level) * RENDER_SCALE;
 		
 		float3 ctmp = tex2Dlod(s, float4(uv, 0.0, 0.0)).rgb;
 		float3 t = noisy.rgb - ctmp;
@@ -147,42 +159,80 @@ float4 upscale(float4 vpos, float2 texcoord, sampler s, float level) {
 	return light;
 }
 
+float4 save(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
+	return tex2Dfetch(sp0, vpos.xy);
+}
 
-float4 upscalePass0(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
+float4 denoisePass0(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
 	return upscale(vpos, texcoord, intermediateLightSampler, 0);
 }
 
-float4 upscalePass1(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
+float4 denoisePass1(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
 	return upscale(vpos, texcoord, SDN1, 1);
 }
 
-float4 upscalePass2(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
+float4 denoisePass2(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
 	return upscale(vpos, texcoord, SDN0, 2);
 }
 
+float4 denoisePass3(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
+	return upscale(vpos, texcoord, SDN1, 3);
+}
+
+float4 denoisePass4(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
+	return upscale(vpos, texcoord, SDN0, 4);
+}
+
+
 float4 blend(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
-	return tonemapLottes(tex2Dfetch(SDN1, vpos.xy * RENDER_SCALE));
+	if (!debug) {
+		float4 bb = inverseTonemapLottes(tex2Dfetch(ReShade::BackBuffer, vpos.xy));
+		return tonemapLottes(tex2Dfetch(SDN1, vpos.xy * RENDER_SCALE) * bb + bb);
+	}
+	return tonemapLottes(tex2Dfetch(SDN1, vpos.xy * RENDER_SCALE) + 0.5);
 }
 
 technique SoupCanTraceRTGI {
+	pass inject {
+		VertexShader = PostProcessVS;
+		PixelShader = inject;
+		RenderTarget = lightingCache;
+	}
 	pass light {
 		VertexShader = PostProcessVS;
 		PixelShader = main;
 		RenderTarget = intermediateLight;
 	}
-	pass upscale0 {
+	#if SOUPCAN_DO_TAA
+	pass accumulate0 {
 		VertexShader = PostProcessVS;
-		PixelShader = upscalePass0;
+		PixelShader = accumulate0;
+		RenderTarget = intermediateLight;
+	}
+	#endif
+	pass denoise0 {
+		VertexShader = PostProcessVS;
+		PixelShader = denoisePass0;
 		RenderTarget = DN1;
 	}
-	pass upscale1 {
+	pass denoise1 {
 		VertexShader = PostProcessVS;
-		PixelShader = upscalePass1;
+		PixelShader = denoisePass1;
 		RenderTarget = DN0;
 	}
-	pass upscale2 {
+	pass denoise2 {
 		VertexShader = PostProcessVS;
-		PixelShader = upscalePass2;
+		PixelShader = denoisePass2;
+		RenderTarget = DN1;
+	}
+	pass denoise3 {
+		VertexShader = PostProcessVS;
+		PixelShader = denoisePass3;
+		RenderTarget = DN0;
+	}
+	pass denoise4 {
+		VertexShader = PostProcessVS;
+		PixelShader = denoisePass4;
 		RenderTarget = DN1;
 	}
 	pass blend {

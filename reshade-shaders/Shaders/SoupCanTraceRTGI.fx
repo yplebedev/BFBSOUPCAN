@@ -4,33 +4,28 @@
 // I was set on the right path and consistently helped by Zenteon
 // The quasirandom sequence is an extention of R2 by Marty, creator of the famous RTGI shader.
 
-#include "ReShade.fxh"
-#include "soupcan_includes/random.fxh"
-#include "soupcan_includes/pos.fxh"
-#include "soupcan_includes/color_ops.fxh"
-#include "soupcan_includes/ATSS.fxh"
 
 #define BUFFER_SIZE int2(BUFFER_WIDTH,BUFFER_HEIGHT)
+
+#include "ReShade.fxh"
+#include "soupcan_includes/color_ops.fxh"
+#include "soupcan_includes/ao.fxh"
+
 #define NOISE_TEX_NAME "QuarkBN_SOUPGI.png"
 
-texture bn < source = NOISE_TEX_NAME; > { Width = 512; Height = 512; Format = RGBA8; };
-sampler sbn { Texture = bn; };
-
-
-// CONSTS
-#define pi 3.14159265359
-#define twoPi 6.28318530718
-#define halfPi 1.57079632679
-
+texture blueNoise < source = NOISE_TEX_NAME; > { Width = 512; Height = 512; Format = RGBA8; };
+sampler sBlueNoise { Texture = blueNoise; };
 
 #ifndef RENDER_SCALE
 	#define RENDER_SCALE 0.5
 	#define BUFFER_SCALED_SIZE = BUFFER_SIZE * RENDER_SCALE
+	#define RCP_BUFFER_SCALE rcp(RENDER_SCALE)
 #endif
 
 #ifndef SOUPCANGI_SPP
 	#define SOUPCANGI_SPP 1
 #endif
+
 
 #ifndef SOUPCAN_DO_TAA
 	#define SOUPCAN_DO_TAA true
@@ -47,10 +42,9 @@ sampler SDN1 { Texture = DN1; };
 
 
 uniform float strength <ui_type = "slider"; ui_min = 0.0; ui_max = 4.0;> = 0.4;
+uniform float aoRadius <ui_type = "slider"; ui_min = 0.0; ui_max = 0.1;> = 0.005;
 uniform bool debug <> = false;
 
-
-uniform int framecount < source = "framecount"; >;
 
 texture intermediateLight { Width = BUFFER_WIDTH * RENDER_SCALE; Height = BUFFER_HEIGHT * RENDER_SCALE; Format = RGBA16F; };
 sampler intermediateLightSampler { Texture = intermediateLight; };
@@ -76,7 +70,6 @@ uniform float2 offset[25] <ui_title = "OFFSETS - DO NOT EDIT";> = {
     float2(-2.0,  2.0), float2(-1.0,  2.0), float2(0.0,  2.0), float2(1.0,  2.0), float2(2.0,  2.0)
 };
 
-
 float4 calculateLighting(float3 normal, float3 pos, float3 lightPos, float4 color, float3 normalAtSampled, float2 texcoord, float4 vpos) {
 	float3 toLight = lightPos - pos;
 	float3 fromLight = normalize(-toLight);
@@ -101,25 +94,29 @@ float4 main(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
 	float4 input = inverseTonemapLottes(tex2Dfetch(ReShade::BackBuffer, vpos.xy));
 	float depth = GetDepth(texcoord);
 	if (1.0 - depth < 0.00001) return linearTosRGB(input);
-	float3 normal = -GetWorldSpaceNormal(texcoord);
+	float3 normal = -getWorldSpaceNormal(texcoord);
 	float3 pos = getWorldPosition(texcoord, depth);
-	float2 seed = tex2Dfetch(sbn, vpos.xy % 512).rg;
+	float2 seed = tex2Dfetch(sBlueNoise, vpos.xy % 512).rg;
 	
 	float4 light = 0;
 	[unroll]
 	for (int i = 0; i < SOUPCANGI_SPP; i++) {
 		float2 randF2 = r2_modified(i + (framecount % 1024) * SOUPCANGI_SPP, seed);
-		float3 normalAtSampled = GetWorldSpaceNormal(randF2);
+		float3 normalAtSampled = getWorldSpaceNormal(randF2);
 		float3 samplePos3D = getWorldPosition(randF2, GetDepth(randF2));
 		light += calculateLighting(normal, pos, samplePos3D, inverseTonemapLottes(tex2D(sLCache, randF2)), normalAtSampled, texcoord, vpos);
 	}
+	
+	float ao = occlusion(texcoord, vpos.xy * RCP_BUFFER_SCALE);
+	light *= ao;
+	
 	return light / SOUPCANGI_SPP;
 }
 
 float4 upscale(float4 vpos, float2 texcoord, sampler s, float level) {
 // https://jo.dreggn.org/home/2010_atrous.pdf
 	float4 noisy = tex2D(s, texcoord);
-	float3 normal = GetWorldSpaceNormal(texcoord);
+	float3 normal = getWorldSpaceNormal(texcoord);
 	float depth = GetDepth(texcoord);
 	if (1.0 - depth < 0.00001) return 0;
 	float3 pos = getWorldPosition(texcoord, depth);
@@ -130,16 +127,16 @@ float4 upscale(float4 vpos, float2 texcoord, sampler s, float level) {
 	
 	float cum_w = 0.0;
 	[unroll]
-	for (int i = 0; i < 25; i++) {
-		float2 uv = texcoord + offset[i] * step * exp2(level) * RENDER_SCALE;
-		
+	for (int i = 0; i < 25; i++) {// 										this might suck
+		float2 uv = texcoord + offset[i] * step * exp2(level) * RENDER_SCALE * 2.0;
+		//																   it is smoother :)
 		float3 ctmp = tex2Dlod(s, float4(uv, 0.0, 0.0)).rgb;
 		float3 t = noisy.rgb - ctmp;
 		
 		float dist2 = dot(t, t);
 		float c_w = min(exp(-(dist2)/c_phi), 1.0);
 		
-		float3 ntmp = GetWorldSpaceNormal(uv);
+		float3 ntmp = getWorldSpaceNormal(uv);
 		t = normal - ntmp;
 		dist2 = max(dot(t, t), 0.0);
 		float n_w = min(exp(-dist2 / n_phi), 1.0);
@@ -154,13 +151,8 @@ float4 upscale(float4 vpos, float2 texcoord, sampler s, float level) {
 		sum += ctmp * weight * kernel[i];
 		cum_w += weight * kernel[i];
 	}
-	
 	float4 light = sum/cum_w;
 	return light;
-}
-
-float4 save(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
-	return tex2Dfetch(sp0, vpos.xy);
 }
 
 float4 denoisePass0(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
@@ -185,11 +177,11 @@ float4 denoisePass4(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_
 
 
 float4 blend(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
-	if (!debug) {
-		float4 bb = inverseTonemapLottes(tex2Dfetch(ReShade::BackBuffer, vpos.xy));
-		return tonemapLottes(tex2Dfetch(SDN1, vpos.xy * RENDER_SCALE) * bb + bb);
-	}
-	return tonemapLottes(tex2Dfetch(SDN1, vpos.xy * RENDER_SCALE) + 0.5);
+		if (!debug) {
+			float4 bb = inverseTonemapLottes(tex2Dfetch(ReShade::BackBuffer, vpos.xy));
+			return tonemapLottes(tex2Dfetch(SDN1, vpos.xy * RENDER_SCALE) * bb + bb);
+		}
+		return tonemapLottes(tex2Dfetch(SDN1, vpos.xy * RENDER_SCALE) + 0.5);
 }
 
 technique SoupCanTraceRTGI {
@@ -203,13 +195,6 @@ technique SoupCanTraceRTGI {
 		PixelShader = main;
 		RenderTarget = intermediateLight;
 	}
-	#if SOUPCAN_DO_TAA
-	pass accumulate0 {
-		VertexShader = PostProcessVS;
-		PixelShader = accumulate0;
-		RenderTarget = intermediateLight;
-	}
-	#endif
 	pass denoise0 {
 		VertexShader = PostProcessVS;
 		PixelShader = denoisePass0;

@@ -68,7 +68,8 @@ float max3(float x, float y, float z) {
 float4 inverseTonemapLottes(float4 col) {
 	col = saturate(col);
 	col = sRGBtoLinear(col);
-	return max(0.0, col * rcp(max(1.0 - max3(col.r, col.g, col.b) * 4 / 10, 0.1)));
+	col = max(col, 0.001) * 1.00001;
+	return col * rcp(1.0 - max3(col.r, col.g, col.b));
 }
 
 float4 tonemapLottes(float4 c) {

@@ -28,10 +28,88 @@ float3 getScreenSpaceNormal(float2 texcoord) {
 }
 
 float3 getWorldSpaceNormal(float2 texcoord) {
-    float3 offset = float3(BUFFER_PIXEL_SIZE, 0.0);
+    float3 offset = float3(BUFFER_PIXEL_SIZE, 0);
     float2 posCenter = texcoord.xy;
     float2 posNorth  = posCenter - offset.zy;
     float2 posEast   = posCenter + offset.xz;
+	float2 posSouth  = posCenter + offset.zy;
+	float2 posWest   = posCenter - offset.xz;
+	float  depthCenter = GetDepth(posCenter);
+	float  depthNorth = GetDepth(posNorth);
+	float  depthEast = GetDepth(posEast);
+	float  depthSouth = GetDepth(posSouth);
+	float  depthWest = GetDepth(posWest);
+	bool2 dir = bool2(abs(depthCenter - depthNorth) < abs(depthCenter - depthSouth), abs(depthCenter - depthEast) < abs(depthCenter - depthWest));
+	
+	float3 vertCenter = getWorldPosition(posCenter,       depthCenter);
+	/*
+float3 vertNorth  = getWorldPosition(posNorth,  GetDepth(posNorth));
+    	float3 vertEast   = getWorldPosition(posEast,   GetDepth(posEast));
+    	if (true) return normalize(cross(vertCenter - vertNorth, vertCenter - vertEast));
+*/
+if (dir.x && dir.y) {
+		float3 vertNorth  = getWorldPosition(posNorth,  GetDepth(posNorth));
+    	float3 vertEast   = getWorldPosition(posEast,   GetDepth(posEast));
+    	return -normalize(cross(vertCenter - vertNorth, vertCenter - vertEast));
+	} else if (!dir.x && !dir.y) {
+		float3 vertSouth  = getWorldPosition(posSouth,  GetDepth(posSouth));
+    	float3 vertWest   = getWorldPosition(posWest,   GetDepth(posWest));
+    	return -normalize(cross(vertCenter - vertSouth, vertCenter - vertWest));		
+	} else if (dir.x) {
+		float3 vertNorth  = getWorldPosition(posNorth,  GetDepth(posNorth));
+		float3 vertWest   = getWorldPosition(posWest,   GetDepth(posWest));
+		return -normalize(-cross(vertCenter - vertNorth, vertCenter - vertWest));
+	} else {
+		float3 vertSouth  = getWorldPosition(posSouth,  GetDepth(posSouth));
+		float3 vertEast   = getWorldPosition(posEast,   GetDepth(posEast));
+		return -normalize(-cross(vertCenter - vertSouth, vertCenter - vertEast));
+	}
+}
+
+float4 getPackedWorldSpaceNormal(float2 texcoord) {
+    float3 offset = float3(BUFFER_PIXEL_SIZE, 0);
+    float2 posCenter = texcoord.xy;
+    float2 posNorth  = posCenter - offset.zy;
+    float2 posEast   = posCenter + offset.xz;
+	float2 posSouth  = posCenter + offset.zy;
+	float2 posWest   = posCenter - offset.xz;
+	float  depthCenter = GetDepth(posCenter);
+	float  depthNorth = GetDepth(posNorth);
+	float  depthEast = GetDepth(posEast);
+	float  depthSouth = GetDepth(posSouth);
+	float  depthWest = GetDepth(posWest);
+	bool2 dir = bool2(abs(depthCenter - depthNorth) < abs(depthCenter - depthSouth), abs(depthCenter - depthEast) < abs(depthCenter - depthWest));
+	
+	float3 vertCenter = getWorldPosition(posCenter,       depthCenter);
+	/*
+float3 vertNorth  = getWorldPosition(posNorth,  GetDepth(posNorth));
+    	float3 vertEast   = getWorldPosition(posEast,   GetDepth(posEast));
+    	if (true) return normalize(cross(vertCenter - vertNorth, vertCenter - vertEast));
+*/
+if (dir.x && dir.y) {
+		float3 vertNorth  = getWorldPosition(posNorth,  GetDepth(posNorth));
+    	float3 vertEast   = getWorldPosition(posEast,   GetDepth(posEast));
+    	return float4(-normalize(cross(vertCenter - vertNorth, vertCenter - vertEast)), depthCenter);
+	} else if (!dir.x && !dir.y) {
+		float3 vertSouth  = getWorldPosition(posSouth,  GetDepth(posSouth));
+    	float3 vertWest   = getWorldPosition(posWest,   GetDepth(posWest));
+    	return float4(-normalize(cross(vertCenter - vertSouth, vertCenter - vertWest)), depthCenter);		
+	} else if (dir.x) {
+		float3 vertNorth  = getWorldPosition(posNorth,  GetDepth(posNorth));
+		float3 vertWest   = getWorldPosition(posWest,   GetDepth(posWest));
+		return float4(-normalize(-cross(vertCenter - vertNorth, vertCenter - vertWest)), depthCenter);
+	} else {
+		float3 vertSouth  = getWorldPosition(posSouth,  GetDepth(posSouth));
+		float3 vertEast   = getWorldPosition(posEast,   GetDepth(posEast));
+		return float4(-normalize(-cross(vertCenter - vertSouth, vertCenter - vertEast)), depthCenter);
+	}
+}
+
+float3 getWorldSpaceNormal2(float2 texcoord) {
+    float3 offset = float3(BUFFER_PIXEL_SIZE, 0.0);
+    float2 posCenter = texcoord.xy;
+    float2 posNorth  = posCenter + offset.zy;
+    float2 posEast   = posCenter - offset.xz;
 	float3 vertCenter = getWorldPosition(posCenter,       GetDepth(posCenter));
     float3 vertNorth  = getWorldPosition(posNorth,  GetDepth(posNorth));
     float3 vertEast   = getWorldPosition(posEast,   GetDepth(posEast));

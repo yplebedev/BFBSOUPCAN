@@ -1,11 +1,19 @@
+#include "ReShade.fxh"
 #define BUFFER_SIZE3 int3(BUFFER_WIDTH,BUFFER_HEIGHT,RESHADE_DEPTH_LINEARIZATION_FAR_PLANE)
 #define GetDepth ReShade::GetLinearizedDepth
 
 float3 getWorldPosition(float2 coords, float depth) {
-        float3 result = float3((coords - 0.5) * depth, depth);
+        float3 result = float3((2.0 * coords - 1.0) * depth, depth);
 
         result *= int3(BUFFER_WIDTH,BUFFER_HEIGHT,RESHADE_DEPTH_LINEARIZATION_FAR_PLANE);
         return result;
+}
+
+float3 getWorldPosition(float2 texcoord) {
+	float depth = ReShade::GetLinearizedDepth(texcoord);
+	float3 result = float3((texcoord * 2.0 - 1.0) * depth, depth);
+	result *= float3(BUFFER_WIDTH, BUFFER_HEIGHT, RESHADE_DEPTH_LINEARIZATION_FAR_PLANE);
+	return result;
 }
 
 float3 getScreenPosition(float3 world) {

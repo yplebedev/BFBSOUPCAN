@@ -53,9 +53,9 @@ float3 atrous(sampler input, float2 texcoord, float level) {
 	
 	float cum_w = 0.0;
 	[unroll]
-	for (int i = 0; i < 25; i++) {// 										this might suck
+	for (int i = 0; i < 25; i++) {
 		float2 uv = texcoord + offset[i] * step * exp2(level) * SCAO_RENDER_SCALE;
-		//																   it is smoother :)
+
 		float3 ctmp = tex2Dlod(input, float4(uv, 0.0, 0.0)).rgb;
 		float3 t = noisy.rgb - ctmp;
 		
@@ -87,7 +87,6 @@ float occlude(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target
 float4 blend(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
 	float4 input = tex2Dfetch(ReShade::BackBuffer, vpos.xy);
 	float ao = atrous(sAORT, texcoord, 2).r;
-	if (ao == 0) return input; // what the fuck.
 	return float4(lerp(ao, input.rgb * ao, 1 - DEBUG_SCAO), 1.0);
 }
 

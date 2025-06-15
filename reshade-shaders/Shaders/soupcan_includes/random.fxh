@@ -1,6 +1,3 @@
-// Port from wikipeda
-// https://en.wikipedia.org/wiki/Halton_sequence#Implementation_in_pseudocode
-
 #ifndef PHI
 	#define PHI 1.6180339887
 #endif

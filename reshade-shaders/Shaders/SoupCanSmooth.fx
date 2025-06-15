@@ -1,28 +1,27 @@
+// Cross bilateral filter approximation using the A-Trous filter.
+// Sky is black. But we skip it anyway.
 #include "ReShade.fxh"
-#include "soupcan_includes/ao.fxh"
+#include "soupcan_includes/pos.fxh"
 
-#ifndef DEBUG_SCAO
-	#define DEBUG_SCAO false
-#endif
+#define c_phi 1 // Color avoiding
+#define n_phi 1 // Normals
+#define p_phi 1 // Depth
 
-#ifndef SCAO_RENDER_SCALE
-	#define SCAO_RENDER_SCALE 0.5
-	#define RCP_RENDER_SCALE rcp(SCAO_RENDER_SCALE)
-#endif
+texture DN0 { Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = RGBA8; };
+texture DN1 { Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = RGBA8; };
 
-#define c_phi 100
-#define n_phi 1
-#define p_phi 0.4
+sampler SDN0 { Texture = DN0; };
+sampler SDN1 { Texture = DN1; };
 
 
-uniform float kernel[25] <ui_title = "GAUSS WHEIGHTS - DO NOT EDIT";> = {
+uniform float kernel[25] <hidden = true;> = {
     1.0/256.0, 1.0/64.0,  3.0/128.0, 1.0/64.0,  1.0/256.0,
     1.0/64.0,  1.0/16.0,  3.0/32.0,  1.0/16.0,  1.0/64.0,
     3.0/128.0, 3.0/32.0,  9.0/64.0,  3.0/32.0,  3.0/128.0,
     1.0/64.0,  1.0/16.0,  3.0/32.0,  1.0/16.0,  1.0/64.0,
     1.0/256.0, 1.0/64.0,  3.0/128.0, 1.0/64.0,  1.0/256.0
 };
-uniform float2 offset[25] <ui_title = "OFFSETS - DO NOT EDIT";> = {
+uniform float2 offset[25] <hidden = true;> = {
     float2(-2.0, -2.0), float2(-1.0, -2.0), float2(0.0, -2.0), float2(1.0, -2.0), float2(2.0, -2.0),
     float2(-2.0, -1.0), float2(-1.0, -1.0), float2(0.0, -1.0), float2(1.0, -1.0), float2(2.0, -1.0),
     float2(-2.0,  0.0), float2(-1.0,  0.0), float2(0.0,  0.0), float2(1.0,  0.0), float2(2.0,  0.0),
@@ -30,16 +29,7 @@ uniform float2 offset[25] <ui_title = "OFFSETS - DO NOT EDIT";> = {
     float2(-2.0,  2.0), float2(-1.0,  2.0), float2(0.0,  2.0), float2(1.0,  2.0), float2(2.0,  2.0)
 };
 
-
-
-texture AORT { Width = BUFFER_WIDTH * SCAO_RENDER_SCALE; Height = BUFFER_HEIGHT * SCAO_RENDER_SCALE; Format = RGBA8; };
-sampler sAORT { Texture = AORT; };
-
-// some day ill prolly do something useful here.
-float4 computeNormals(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
-	return getPackedWorldSpaceNormal(texcoord);
-}
-
+//				BackBuffer        uv              iteration
 float3 atrous(sampler input, float2 texcoord, float level) {
 	float4 noisy = tex2D(input, texcoord);
 	float3 normal = getWorldSpaceNormal(texcoord);
@@ -54,7 +44,7 @@ float3 atrous(sampler input, float2 texcoord, float level) {
 	float cum_w = 0.0;
 	[unroll]
 	for (int i = 0; i < 25; i++) {
-		float2 uv = texcoord + offset[i] * step * exp2(level) * SCAO_RENDER_SCALE;
+		float2 uv = texcoord + offset[i] * step * exp2(level);
 
 		float3 ctmp = tex2Dlod(input, float4(uv, 0.0, 0.0)).rgb;
 		float3 t = noisy.rgb - ctmp;
@@ -80,24 +70,31 @@ float3 atrous(sampler input, float2 texcoord, float level) {
 	return sum/cum_w;
 }
 
-float occlude(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
-	return gtao(texcoord, vpos.xy);
+float4 d0(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
+	return float4(atrous(ReShade::BackBuffer, texcoord, 0), 1.0);
 }
 
-float4 blend(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
-	float4 input = tex2Dfetch(ReShade::BackBuffer, vpos.xy);
-	float ao = atrous(sAORT, texcoord, 2).r;
-	return float4(lerp(ao, input.rgb * ao, 1 - DEBUG_SCAO), 1.0);
+float4 d1(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
+	return float4(atrous(SDN0, texcoord, 1), 1.0);
 }
 
-technique SoupCanAO {
-	pass AO {
+float4 d2(float4 vpos : SV_Position, float2 texcoord : TEXCOORD) : SV_Target {
+	return float4(atrous(SDN1, texcoord, 2), 1.0);
+}
+
+technique SoupCanSmooth {
+	pass {
+		PixelShader = d0;
 		VertexShader = PostProcessVS;
-		PixelShader = occlude;
-		RenderTarget = AORT;
+		RenderTarget = DN0;
 	}
-	pass blend {
+	pass {
+		PixelShader = d1;
 		VertexShader = PostProcessVS;
-		PixelShader = blend;
+		RenderTarget = DN1;
+	}
+	pass {
+		PixelShader = d2;
+		VertexShader = PostProcessVS;
 	}
 }

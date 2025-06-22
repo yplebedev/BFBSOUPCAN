@@ -36,8 +36,6 @@ SOFTWARE.*/
 	#define RENDER_MULT_Y 0.5
 #endif
 
-#define RENDER_MULTF2 float2(RENDER_MULT_X, RENDER_MULT_Y)
-
 texture bnt <source = "stbn.png";> {Width = 1024; Height = 1024; Format = R8; };
 sampler bn { Texture = bnt; };
 
@@ -215,8 +213,13 @@ uint sliceSteps(float3 positionVS, float3 V, float2 start, float2 rayDir, float 
 
 
 float gtao(float2 uv, float2 vpos) {
+	//float2 random = fastHash(uv);
+	//float2 random = bad_bn(vpos);
 	float2 random = stbn(vpos);
+	//float2 random = float2(GRnoise2(vpos.xy), GRnoise2(vpos.yx));
+	//float2 random = float2(bayer_direct((uint2)vpos.xy), bayer_direct((uint2)vpos.yx)); do NOT use bayer for Y.
 	
+	float2 start = uv * BUFFER_SCREEN_SIZE;
 	float3 positionVS = zfw::uvToView(uv);
 	positionVS.z *= 0.9999; // Move center pixel towards camera a bit.
 
@@ -239,8 +242,8 @@ float gtao(float2 uv, float2 vpos) {
 		
 		uint aoBF = 0;
 		float offset = max(random.y * step, length(BUFFER_PIXEL_SIZE));
-		aoBF = sliceSteps(positionVS, V, vpos, direction, offset, step, 1, N, aoBF);
-		aoBF = sliceSteps(positionVS, V, vpos, -direction, offset, step, -1, N, aoBF);
+		aoBF = sliceSteps(positionVS, V, start, direction, offset, step, 1, N, aoBF);
+		aoBF = sliceSteps(positionVS, V, start, -direction, offset, step, -1, N, aoBF);
 
 		ao += float(countbits(aoBF));
 	}
@@ -249,36 +252,36 @@ float gtao(float2 uv, float2 vpos) {
 }
 
 float main(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
-	float3 MV = zfw::getVelocity(uv * 2.0);
-	return lerp(gtao(uv * 2.0, vpos.xy * 2.0), tex2D(AOSPrev, uv + MV.xy).x, historySize * MV.z);
+	float3 MV = zfw::getVelocity(uv);
+	return lerp(gtao(uv, vpos.xy), tex2D(AOSPrev, uv + MV.xy).x, historySize * MV.z);
 }
 
 float4 display(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
 	float4 denoised = atrous(AOS, uv, 0);
 	float4 bb = float4(zfw::getBackBuffer(uv), 1.0);
-	#define RCP_GAMMA 2.2 //erm, aktually me, i fucking dare you
+	#define RCP_GAMMA 2.2
 	#define GAMMA 0.4545
 	bb = pow(bb, RCP_GAMMA);
 	return pow(lerp(bb, lerp(denoised * bb, denoised, debug), strength), GAMMA);
 }
 
-float cache(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
-	return tex2Dfetch(AOS, vpos.xy * 2.0).x;
+float4 cache(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
+	return tex2Dfetch(AOS, vpos.xy).x;
 }
 
-technique SCVBAO {
+technique VBAO {
 	pass Main { 
 		VertexShader = PostProcessVS;
-		PixelShader = main; //also reprojects
+		PixelShader = main;
 		RenderTarget = AOTex;
 	}
 	pass Display {
 		VertexShader = PostProcessVS;
-		PixelShader = display; // mix + one pass of atrous
+		PixelShader = display;
 	}
 	pass Cache {
 		VertexShader = PostProcessVS;
-		PixelShader = cache; // write to prev tex
+		PixelShader = cache;
 		RenderTarget = AOTexPrev;
 	}
 }

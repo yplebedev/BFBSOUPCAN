@@ -181,7 +181,7 @@ float4 JointBilateralUpsample(
    sampler GuideHigh, // This should be 2/1 the size as Image and GuideLow
    float2 Tex ) {
 	   // Initialize variables
-	   float2 PixelSize = ldexp(fwidth(Tex.xy), 1.0);
+	   float2 PixelSize = ldexp(fwidth(Tex.xy), 1.0) * 0.5;
 	   float4 GuideHighSample = tex2D(GuideHigh, Tex);
 	   float4 BilateralSum = 0.0;
 	   float4 WeightSum = 0.0;
@@ -211,11 +211,15 @@ float4 JointBilateralUpsample(
    return BilateralSum / WeightSum;
 }
 
-
+// because sometimes, quater res depth for halfres image looks dogshit.
+texture2D texDepth : DEPTH;
+sampler sDepth { Texture = texDepth; };
 uint sliceSteps(float3 positionVS, float3 V, float2 start, float2 rayDir, float t, float step, float samplingDirection, float N, uint bitfield) {
     for (uint i = 0; i < STEPS; i++, t += step) {
         float2 samplePos = clamp(start + t * rayDir, 1, BUFFER_SCREEN_SIZE - 2);
         float3 samplePosVS = zfw::uvToView(samplePos.xy / BUFFER_SCREEN_SIZE);
+        //float depth = tex2Dlod(sDepth, float4(samplePos / BUFFER_SCREEN_SIZE, 0, 0)).x;
+        //float3 samplePosVS = zfw::uvzToView(float3(samplePos.xy / BUFFER_SCREEN_SIZE, depth));
         float3 delta = samplePosVS - positionVS;
 	
 	    float2 fb = acos(float2(dot(normalize(delta), V), dot(normalize(delta - V * THICKNESS), V)));

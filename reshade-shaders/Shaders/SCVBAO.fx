@@ -101,7 +101,7 @@ uniform float2 offset[25] <hidden = true;> = {
 
 #define SECTORS 32
 
-#define R 1500.0
+#define R 2000.0
 
 #define R_MAX_CLAMP 2000
 
@@ -221,7 +221,9 @@ uint sliceSteps(float3 positionVS, float3 V, float2 start, float2 rayDir, float 
         //float depth = tex2Dlod(sDepth, float4(samplePos / BUFFER_SCREEN_SIZE, 0, 0)).x;
         //float3 samplePosVS = zfw::uvzToView(float3(samplePos.xy / BUFFER_SCREEN_SIZE, depth));
         float3 delta = samplePosVS - positionVS;
-	
+		// to testers, if you replace the following line with the one right after, you need to also adjust thickness accordingly. 
+		//float2 fb = acos(float2(dot(normalize(delta), V), dot(normalize(delta - V * THICKNESS * length(samplePosVS)), V)));
+		
 	    float2 fb = acos(float2(dot(normalize(delta), V), dot(normalize(delta - V * THICKNESS), V)));
 	    fb = saturate(((samplingDirection * -fb) - N + PI/2) / PI);
 	    fb = samplingDirection >= 0 ? fb.yx : fb.xy;

@@ -273,8 +273,9 @@ float gtao(float2 uv, float2 vpos) {
 
 float main(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
 	float3 MV = zfw::getVelocity(uv);
-	float weight = 1.0 / tex2Dfetch(sAccum, vpos.xy); //bitch you will forget to div here and in read + save!!!!
-	return gtao(uv, vpos.xy) + tex2D(AOSPrev, uv + MV.xy).x * weight * MV.z;
+	//float weight = 1.0 / tex2Dfetch(sAccum, vpos.xy); //bitch you will forget to div here and in read + save!!!!
+	//return gtao(uv, vpos.xy) + tex2D(AOSPrev, uv + MV.xy).x * weight * MV.z; not yet
+	return lerp(gtao(uv, vpos.xy), tex2D(AOSPrev, uv + MV.xy).x, historySize * MV.z);
 }
 
 uint read(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {

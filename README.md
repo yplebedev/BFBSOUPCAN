@@ -35,9 +35,13 @@ HOW TO USE:
   
   Step 4 (in here for newbies): Do not touch the blur, unless it is too small, and you see halos.
 
+Shaders used: Framework, DH_UBER_MASK, ReVeil, VBAO, iMMERSE SMAA, FSR1_2X. Credit to U.K.N.
+![SCVBAO](https://github.com/user-attachments/assets/e66ae8bc-3aa5-482b-81f2-5ba77432b9e3)
 SCVBAO (Beta):
-An ambient occlusion that objectivly doesn't quite rival alternatives in "objective" measures (read: is kinda mid), but it exposes multiple preproc settings for nailing cerain looks, in the limited testing I've recieved it's much better at detail preservation. It fits a reasonable performance target, and scales from mid-range to high-end hardware reasonably. This effect has been developed free from ad-hoc falloff parameters, and instead depends only and exclusivly on visibility bitmasking to handle thin geometry accuratly. 
+
+An ambient occlusion that objectivly doesn't quite rival alternatives in "objective" measures (read: is kinda mid), but it exposes multiple preproc settings for nailing certain looks, in the limited testing I've recieved, it's much better at detail preservation. It fits a reasonable performance target, and scales from mid-range to high-end hardware reasonably. This effect has been developed free from ad-hoc falloff parameters, and instead depends only and exclusivly on visibility bitmasking to handle thin geometry accuratly. 
 HOW IT WORKS:
+
 This will be quite brief as the implementation has a lot of details that will perhaps one day I will cover it on more detail.
 This follows the standard slice formulation, splooshing the integration dimention, that speeds up integration, lowers the amount of wasted memory fetches and improves the manifestation or blue noise in the final result. The difference between this technique and GTAO primarily boils down to the fact, that GTAO only really bothers with two angles to represent and entire plane's worth of geometry. This (in GTAO) leads to overoccludion behind close-by objects. Visibility bitmasking instead stores a bitmask, a field of 32 directions, either occluded or not. This allows to assume thickness, and have each step occlude a handful of directions at once. The resulting occlusion is calculated via a countbits() call, and, while being much harder to work with and a notch slower, the end result behaves much more reasonably, in my opinion.
 The final image is computed by denoising and upscaling, as the entire image is generated in halfres. A joint bilateral filter is used for both. 
@@ -55,3 +59,10 @@ HOW TO USE:
 10. Set the steps as you really feel like it. The first 10 or so steps will add more frametime, but it could reasonably be set quite high on certain systems. More steps = more detailed occlusion.
 11. Disable the debug view
 12. Profit.
+
+
+
+
+
+Image albums, in case I make more:
+https://imgsli.com/MzkxNzAy

@@ -293,14 +293,16 @@ float denoise1(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
 	return atrous(sDN0, uv, 1);
 }
 
-
+#define RCP_GAMMA 2.2
+#define GAMMA 0.4545
 float4 display(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
 	//float denoised = tex2Dfetch(sDN1, vpos.xy * 0.5).x;
 	float denoised = JointBilateralUpsample(AOS, lowN, highN, uv).x;
 	float4 bb = float4(zfw::getBackBuffer(uv), 1.0);
-	#define RCP_GAMMA 2.2
-	#define GAMMA 0.4545
 	bb = pow(bb, RCP_GAMMA);
+	float luma = dot(bb, float4(0.2126, 0.7152, 0.0722, 0.));
+	float protection = smoothstep(0.0, 1.0, luma);
+	denoised = lerp(denoised, 1.0, protection); // warning, your balls WILL explode!
 	return pow(lerp(bb, lerp(denoised * bb, denoised, debug), strength), GAMMA);
 }
 

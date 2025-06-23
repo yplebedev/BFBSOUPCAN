@@ -41,6 +41,7 @@ HOW IT WORKS:
 This will be quite brief as the implementation has a lot of details that will perhaps one day I will cover it on more detail.
 This follows the standard slice formulation, splooshing the integration dimention, that speeds up integration, lowers the amount of wasted memory fetches and improves the manifestation or blue noise in the final result. The difference between this technique and GTAO primarily boils down to the fact, that GTAO only really bothers with two angles to represent and entire plane's worth of geometry. This (in GTAO) leads to overoccludion behind close-by objects. Visibility bitmasking instead stores a bitmask, a field of 32 directions, either occluded or not. This allows to assume thickness, and have each step occlude a handful of directions at once. The resulting occlusion is calculated via a countbits() call, and, while being much harder to work with and a notch slower, the end result behaves much more reasonably, in my opinion.
 The final image is computed by denoising and upscaling, as the entire image is generated in halfres. A joint bilateral filter is used for both. 
+
 HOW TO USE:
 1. Enable the shader and Zenteon: Framework, and put them in the correct order (first, framework, then AO).
 2. Open the shader FX, and remove the "#define zfw Zenteon", as it **will not compile as-is**.

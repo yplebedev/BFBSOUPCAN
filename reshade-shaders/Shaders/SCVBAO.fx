@@ -303,8 +303,8 @@ float4 display(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
 	bb = pow(bb, RCP_GAMMA);
 	float luma = dot(bb, float4(0.2126, 0.7152, 0.0722, 0.));
 	float protection = smoothstep(0.0, 1.0, luma);
-	denoised = lerp(denoised, 1.0, protection); // warning, your balls WILL explode!
-	return pow(lerp(bb, lerp(denoised * bb, denoised, debug), strength), GAMMA);
+	//denoised = lerp(denoised, 1.0, protection); // warning, your balls WILL explode!
+	return pow(lerp(bb, lerp(denoised * bb, denoised, debug), strength), 1);
 }
 
 float4 cache(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {

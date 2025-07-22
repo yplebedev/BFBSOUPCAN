@@ -24,13 +24,10 @@
 #pragma once
 
 #define RES float2(BUFFER_WIDTH, BUFFER_HEIGHT)
-
 #define FARPLANE RESHADE_DEPTH_LINEARIZATION_FAR_PLANE
 #define IASPECT_RATIO float2(1.0, RES.x / RES.y)
-
 #define WRAPMODE(WTYPE) AddressU = WTYPE; AddressV = WTYPE; AddressW = WTYPE
 #define FILTER(FTYPE) MagFilter = FTYPE; MinFilter = FTYPE; MipFilter = FTYPE
-
 #define DIV_RND_UP(a, b) ((int(a)+int(b)-1)/int(b))
 #define DIVRES(DIVRES_RIV) Width = DIV_RND_UP(RES.x, DIVRES_RIV); Height = DIV_RND_UP(RES.y, DIVRES_RIV)
 
@@ -47,7 +44,7 @@ namespace zfw {
 	texture2D tLowNormal { DIVRES(4); Format = RG8; MipLevels = 7; };
 	sampler2D sLowNormal { Texture = tLowNormal; MagFilter = POINT; };
 	texture2D tLowDepth { DIVRES(4); Format = R16; MipLevels = 7; };
-	sampler2D sLowDepth { Texture = tLowDepth; };
+	sampler2D sLowDepth { Texture = tLowDepth; FILTER(POINT); };
 	
 	//===================================================================================
 	//Projections
@@ -64,14 +61,24 @@ namespace zfw {
 	
 	float3 uvzToView(float3 xyz)
 	{
+		xyz.xy = (floor(xyz.xy*RES) + 0.5) / RES;
 		float3 m = float3(fl / IASPECT_RATIO, 1.0);
 		float z = xyz.z;
 		xyz = float3(2*xyz.xy-1,1.0);
 		return (z * FARPLANE + 1.0) * xyz*m;
 	}
+
+	float3 uvzToView(float2 xy, float z)
+	{
+		xy = (floor(xy*RES) + 0.5) / RES;
+		float3 m = float3(fl / IASPECT_RATIO, 1.0);
+		float3 xyz = float3(2*xy-1,1.0);
+		return (z * FARPLANE + 1.0) * xyz*m;
+	}
 	
 	float3 uvToView(float2 xy)
 	{
+		xy = (floor(xy*RES) + 0.5) / RES;
 		float z = ReShade::GetLinearizedDepth(xy);
 		float3 m = float3(fl / IASPECT_RATIO, 1.0);
 		float3 xyz = float3(2*xy-1,1.0);
@@ -80,9 +87,9 @@ namespace zfw {
 	
 	float3 viewToUv(float3 xyz)
 	{
-		float3 m = float3(fl / IASPECT_RATIO, 1.0);
-		xyz /= m * xyz.z;
-		return 0.5 + 0.5 * xyz;
+		float3 m = float3(fl / IASPECT_RATIO, FARPLANE);
+		xyz.xy /= m.xy * xyz.z;
+		return float3(0.5 + 0.5 * xyz.xy, (xyz.z - 1.0) / FARPLANE);
 	}
 	
 	float3 UVtoOCT(float2 xy)
@@ -192,7 +199,7 @@ namespace zfw {
 	}
 	
 	float3 toneMapInverse(float3 x, float whitepoint)
-	{
+	{	
 		x = pow(x,2.2);
 		float HDR_RED = 1.0 + rcp(whitepoint);
 		float l = dot(x, float3(0.2126, 0.7152,0.0722));
@@ -202,3 +209,11 @@ namespace zfw {
 	}
 
 }
+
+#undef RES
+#undef FARPLANE
+#undef IASPECT_RATIO
+#undef WRAPMODE
+#undef FILTER
+#undef DIV_RND_UP
+#undef DIVRES

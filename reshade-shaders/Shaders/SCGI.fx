@@ -268,8 +268,8 @@ float4 denoise1(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
 
 float3 blend(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
 	float4 gi = tex2D(sGI, uv);
-	//return zfw::toneMap((gi.rgb + gi.a * 0.001) * strength, 20.0);
-	return zfw::toneMap((gi.rgb + gi.a * 0.001) * strength * zfw::getAlbedo(uv) + zfw::toneMapInverse(tex2D(ReShade::BackBuffer, uv).rgb, 20.0), 20.0);
+	return zfw::toneMap((gi.rgb + gi.a * 0.001) * strength, 20.0);
+	//return zfw::toneMap((gi.rgb + gi.a * 0.001) * strength * zfw::getAlbedo(uv) + zfw::toneMapInverse(tex2D(ReShade::BackBuffer, uv).rgb, 20.0), 20.0);
 }
 
 technique SCGI {

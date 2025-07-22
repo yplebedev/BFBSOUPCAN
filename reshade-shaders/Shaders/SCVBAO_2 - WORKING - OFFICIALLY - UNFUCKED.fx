@@ -28,13 +28,7 @@ SOFTWARE.*/
 	#define PI 3.14159265358979
 #endif
 
-#ifndef RENDER_MULT_X
-	#define RENDER_MULT_X 0.5
-#endif
-
-#ifndef RENDER_MULT_Y
-	#define RENDER_MULT_Y 0.5
-#endif
+#define __PXSDECL__ (float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target
 
 texture bnt <source = "stbn.png";> {Width = 1024; Height = 1024; Format = R8; };
 sampler bn { Texture = bnt; };
@@ -47,6 +41,12 @@ sampler sAO1 { Texture = AO1;
 	MipFilter = POINT; };
 texture AO2 { Width = BUFFER_WIDTH / 2; Height = BUFFER_HEIGHT / 2; Format = R8; };
 sampler sAO2 { Texture = AO2; 
+	MagFilter = POINT;
+	MinFilter = POINT;
+	MipFilter = POINT; };
+	
+texture AO3 { Width = BUFFER_WIDTH / 2; Height = BUFFER_HEIGHT / 2; Format = R8; };
+sampler sAO3 { Texture = AO3; 
 	MagFilter = POINT;
 	MinFilter = POINT;
 	MipFilter = POINT; };
@@ -80,7 +80,7 @@ uniform float2 offset[25] <hidden = true;> = {
 };
 
 #ifndef SCVBAO_SLICES
-	#define SCVBAO_SLICES 1
+	#define SCVBAO_SLICES 4
 #endif
 
 #ifndef SCVBAO_STEPS
@@ -118,11 +118,45 @@ float2 stbn(float2 p) {
 	
 }
 
+// By Zenteon
+float4 GatherLinDepth(float2 texcoord)
+    {
+        #if RESHADE_DEPTH_INPUT_IS_UPSIDE_DOWN
+        texcoord.y = 1.0 - texcoord.y;
+        #endif
+        #if RESHADE_DEPTH_INPUT_IS_MIRRORED
+                texcoord.x = 1.0 - texcoord.x;
+        #endif
+        texcoord.x /= RESHADE_DEPTH_INPUT_X_SCALE;
+        texcoord.y /= RESHADE_DEPTH_INPUT_Y_SCALE;
+        #if RESHADE_DEPTH_INPUT_X_PIXEL_OFFSET
+        texcoord.x -= RESHADE_DEPTH_INPUT_X_PIXEL_OFFSET * BUFFER_RCP_WIDTH;
+        #else
+        texcoord.x -= RESHADE_DEPTH_INPUT_X_OFFSET / 2.000000001;
+        #endif
+        #if RESHADE_DEPTH_INPUT_Y_PIXEL_OFFSET
+        texcoord.y += RESHADE_DEPTH_INPUT_Y_PIXEL_OFFSET * BUFFER_RCP_HEIGHT;
+        #else
+        texcoord.y += RESHADE_DEPTH_INPUT_Y_OFFSET / 2.000000001;
+        #endif
+        float4 depth = tex2DgatherR(ReShade::DepthBuffer, texcoord) * RESHADE_DEPTH_MULTIPLIER;
+        
+        #if RESHADE_DEPTH_INPUT_IS_LOGARITHMIC
+        const float C = 0.01;
+        depth = (exp(depth * log(C + 1.0)) - 1.0) / C;
+        #endif
+        #if RESHADE_DEPTH_INPUT_IS_REVERSED
+        depth = 1.0 - depth;
+        #endif
+        const float N = 1.0;
+        depth /= RESHADE_DEPTH_LINEARIZATION_FAR_PLANE - depth * (RESHADE_DEPTH_LINEARIZATION_FAR_PLANE - N);
+        
+        return depth;
+    }
+
 float4 atrous(sampler input, float2 texcoord, float level) {
 	float4 noisy = tex2D(input, texcoord);
 	float3 normal = zfw::getNormal(texcoord);
-	float depth = ReShade::GetLinearizedDepth(texcoord);
-	if (1.0 - depth < 0.00001) return 1.0;
 	float3 pos = zfw::uvToView(texcoord);
 	
 	float4 sum = 0.0;
@@ -157,9 +191,20 @@ float4 atrous(sampler input, float2 texcoord, float level) {
 	return sum/cum_w;
 }
 
-sampler lowN { Texture = zfw::tLowNormal; };
-sampler highN{ Texture = zfw::tNormal; };
-// From papadanku.github.io
+texture minZ { Width = BUFFER_WIDTH / 2; Height = BUFFER_HEIGHT / 2; Format = R16; };
+sampler sminZ { Texture = minZ; 
+	MagFilter = POINT;
+	MinFilter = POINT;
+	MipFilter = POINT; };
+sampler lowN { Texture = zfw::tLowNormal;
+	MagFilter = POINT;
+	MinFilter = POINT;
+	MipFilter = POINT; };
+sampler highN{ Texture = zfw::tNormal;
+	MagFilter = POINT;
+	MinFilter = POINT;
+	MipFilter = POINT; };
+// Modified from papadanku.github.io
 // https://www.semanticscholar.org/paper/Multistep-joint-bilateral-depth-upsampling-Riemens-Gangwal/1ddf9ad017faf63b04778c1ddfc2330d64445da8
 float4 JointBilateralUpsample(
    sampler Image, // This should be 1/2 the size as GuideHigh
@@ -167,8 +212,10 @@ float4 JointBilateralUpsample(
    sampler GuideHigh, // This should be 2/1 the size as Image and GuideLow
    float2 Tex ) {
 	   // Initialize variables
-	   float2 PixelSize = ldexp(fwidth(Tex.xy), 1.0) * 0.5;
-	   float4 GuideHighSample = tex2D(GuideHigh, Tex);
+	   float2 PixelSize = ldexp(fwidth(Tex.xy), 1.0) * .5;
+	   //float4 GuideHighSample = tex2D(GuideHigh, Tex);
+	   float GuideHighSample = ReShade::GetLinearizedDepth(Tex);
+	   float3 GuideHighN = zfw::getNormal(Tex);
 	   float4 BilateralSum = 0.0;
 	   float4 WeightSum = 0.0;
 	
@@ -182,10 +229,13 @@ float4 JointBilateralUpsample(
 	
 	         // Sample image and guide
 	         float4 ImageSample = tex2Dlod(Image, float4(OffsetTex, 0.0, 0.0));
-	         float4 GuideLowSample = tex2D(GuideLow, OffsetTex);
+	         //float4 GuideLowSample = tex2D(GuideLow, OffsetTex);
+	         float GuideLowSample = tex2D(sminZ, OffsetTex).r;
+	         float deltaD = exp(-40. * abs(GuideHighSample - GuideHighSample) / (GuideHighSample + 0.0001));
+	         float3 GuideLowN = zfw::sampleNormal(OffsetTex, 0);
 	
 	         // Calculate weight
-	         float3 Delta = GuideLowSample.xyz - GuideHighSample.xyz;
+	         float3 Delta = min(GuideLowN - GuideHighN, deltaD);
 	         float DotDD = dot(Delta, Delta);
 	         float Weight = (DotDD > 0.0) ? 1.0 / DotDD : 1.0;
 	
@@ -201,7 +251,8 @@ uint sliceSteps(float3 positionVS, float3 V, float2 start, float2 rayDir, float 
     for (uint i = 0; i < SCVBAO_STEPS; i++, t += step) {
         float2 samplePos = clamp(start + t * rayDir, 1, BUFFER_SCREEN_SIZE - 2);
         samplePos = floor(samplePos) + 0.5;
-        float3 samplePosVS = zfw::uvToView(samplePos.xy / BUFFER_SCREEN_SIZE);
+        float2 samplePosUV = samplePos.xy / BUFFER_SCREEN_SIZE * 2;
+        float3 samplePosVS = zfw::uvzToView(samplePosUV, tex2D(sminZ, samplePosUV).r);
         float3 delta = samplePosVS - positionVS;
 	
 	    float2 fb = acos(float2(dot(normalize(delta), V), dot(normalize(delta + THICKNESS * normalize(samplePosVS)), V)));
@@ -221,8 +272,9 @@ uint sliceSteps(float3 positionVS, float3 V, float2 start, float2 rayDir, float 
 float gtao(float2 uv, float2 vpos) {
 	float2 random = stbn(vpos);
 	
-	float2 start = vpos * 2.;
-	float3 positionVS = zfw::uvToView(uv);
+	float2 start = vpos;
+	float depth = tex2D(sminZ, uv).r;
+	float3 positionVS = zfw::uvzToView(uv, depth);
 	positionVS.z *= 0.9999; // Move center pixel towards camera a bit.
 
 	float ao = 0.0;
@@ -246,7 +298,7 @@ float gtao(float2 uv, float2 vpos) {
 		float N = signN * acos(cosN);
 		
 		uint aoBF = 0;
-		float offset = max(random.y * step, length(BUFFER_PIXEL_SIZE));
+		float offset = max(random.y * step, length(BUFFER_PIXEL_SIZE) * 2.);
 		aoBF = sliceSteps(positionVS, V, start, direction, offset, step, 1, N, aoBF);
 		aoBF = sliceSteps(positionVS, V, start, -direction, offset, step, -1, N, aoBF);
 
@@ -256,32 +308,66 @@ float gtao(float2 uv, float2 vpos) {
 	return positionVS.z > FAR_CLIP || ao < -0.001 ? 1.0 : ao;
 }
 
-float4 main(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
-	const float ao = pow(gtao(uv, vpos.xy / 2), 1);
+
+float prepMinZ __PXSDECL__ {
+	float4 z4 = GatherLinDepth(uv);
+	return min(min(z4.x, z4.y), min(z4.z, z4.w));
+}
+
+float4 main __PXSDECL__ {
+	float ao = pow(gtao(uv, vpos.xy), 1);
+	const float3 mv = zfw::getVelocity(uv);
+	ao = lerp(ao, tex2D(sAO3, uv + mv.xy).x, 0.8 * mv.z);
 	return float4(ao, ao, ao, 1.0);
 }
 
-float4 denoise1(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
-	return atrous(sAO1, uv, 1).xxxx;
+float4 save __PXSDECL__ {
+	return tex2Dfetch(sAO1, vpos.xy);
 }
 
-float4 upscale(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
-	return JointBilateralUpsample(sAO2, lowN, highN, uv);
+float4 denoise1 __PXSDECL__ {
+	return atrous(sAO1, uv, 0).xxxx;
+}
+
+float4 denoise2 __PXSDECL__ {
+	return atrous(sAO2, uv, 1).xxxx;
+}
+
+
+float4 upscale __PXSDECL__ {
+	const float3 hdr = zfw::toneMapInverse(tex2Dfetch(ReShade::BackBuffer, vpos.xy).rgb, 15.0);
+	return JointBilateralUpsample(sAO1, lowN, highN, uv).xxxx;
+	//return float4(zfw::toneMap(JointBilateralUpsample(sAO2, lowN, highN, uv).xxx * hdr, 15.0), 1.0);
 }
 
 technique SCAO {
+	pass PrepZ {
+		VertexShader = PostProcessVS;
+		PixelShader = prepMinZ;
+		RenderTarget = minZ;
+	}
 	pass Main { 
 		VertexShader = PostProcessVS;
 		PixelShader = main;
 		RenderTarget = AO1;
+	}
+	pass Save {
+		VertexShader = PostProcessVS;
+		PixelShader = save;
+		RenderTarget = AO3;
 	}
 	pass Denoise {
 		VertexShader = PostProcessVS;
 		PixelShader = denoise1;
 		RenderTarget = AO2;
 	}
+	pass Denoise2 {
+		VertexShader = PostProcessVS;
+		PixelShader = denoise2;
+		RenderTarget = AO1;
+	}
 	pass Upscale {
 		VertexShader = PostProcessVS;
-		PixelShader = main;
+		PixelShader = upscale;
 	}
 }

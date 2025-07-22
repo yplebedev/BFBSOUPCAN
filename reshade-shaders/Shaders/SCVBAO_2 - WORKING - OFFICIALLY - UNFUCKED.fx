@@ -59,6 +59,9 @@ uniform float power <ui_type = "slider"; ui_label = "Sampling bias power"; ui_to
 uniform float R <ui_type = "slider"; ui_label = "Radius"; ui_tooltip = "Increases the effect scale, but lowers effective quality and lowers cache coherency."; ui_min = 50.0; ui_max = 50000.0;> = 3000.0; 
 uniform float THICKNESS <ui_type = "slider"; ui_label = "Thickness"; ui_tooltip = "SCVBAO uses... you guessed it, VBAO. It allows for a thickness heuristic. Don't set this too high or low!"; ui_min = 0.0; ui_max = 4.0;> = 2.0; 
 
+uniform float sampleQThresh1 <ui_type = "slider"; ui_label = "Res dropoff"; ui_tooltip = "Dev setting!"; ui_min = 0.0; ui_max = 4000.0;> = 16.0;
+//uniform float sampleQThresh2 <ui_type = "slider"; ui_label = "Res dropoff 2"; ui_tooltip = "Dev setting!"; ui_min = 0.0; ui_max = 4000.0;> = 200.0; 
+
 #define c_phi 1 // Color avoiding
 #define n_phi 1 // Normals
 #define p_phi 1 // Depth
@@ -92,13 +95,7 @@ uniform float2 offset[25] <hidden = true;> = {
 
 #define SECTORS 32
 
-//#define R 3000.0
-
-#define R_MAX_CLAMP 5000
-
 #define FAR_CLIP (RESHADE_DEPTH_LINEARIZATION_FAR_PLANE-1)
-
-//#define THICKNESS 2
 
 // Modified from https://www.shadertoy.com/view/4djSRW
 // It's called once per pixel.
@@ -122,40 +119,39 @@ float2 stbn(float2 p) {
 }
 
 // By Zenteon
-float4 GatherLinDepth(float2 texcoord)
-    {
-        #if RESHADE_DEPTH_INPUT_IS_UPSIDE_DOWN
-        texcoord.y = 1.0 - texcoord.y;
-        #endif
-        #if RESHADE_DEPTH_INPUT_IS_MIRRORED
-                texcoord.x = 1.0 - texcoord.x;
-        #endif
-        texcoord.x /= RESHADE_DEPTH_INPUT_X_SCALE;
-        texcoord.y /= RESHADE_DEPTH_INPUT_Y_SCALE;
-        #if RESHADE_DEPTH_INPUT_X_PIXEL_OFFSET
-        texcoord.x -= RESHADE_DEPTH_INPUT_X_PIXEL_OFFSET * BUFFER_RCP_WIDTH;
-        #else
-        texcoord.x -= RESHADE_DEPTH_INPUT_X_OFFSET / 2.000000001;
-        #endif
-        #if RESHADE_DEPTH_INPUT_Y_PIXEL_OFFSET
-        texcoord.y += RESHADE_DEPTH_INPUT_Y_PIXEL_OFFSET * BUFFER_RCP_HEIGHT;
-        #else
-        texcoord.y += RESHADE_DEPTH_INPUT_Y_OFFSET / 2.000000001;
-        #endif
-        float4 depth = tex2DgatherR(ReShade::DepthBuffer, texcoord) * RESHADE_DEPTH_MULTIPLIER;
-        
-        #if RESHADE_DEPTH_INPUT_IS_LOGARITHMIC
-        const float C = 0.01;
-        depth = (exp(depth * log(C + 1.0)) - 1.0) / C;
-        #endif
-        #if RESHADE_DEPTH_INPUT_IS_REVERSED
-        depth = 1.0 - depth;
-        #endif
-        const float N = 1.0;
-        depth /= RESHADE_DEPTH_LINEARIZATION_FAR_PLANE - depth * (RESHADE_DEPTH_LINEARIZATION_FAR_PLANE - N);
-        
-        return depth;
-    }
+float4 GatherLinDepth(float2 texcoord, sampler s) {
+    #if RESHADE_DEPTH_INPUT_IS_UPSIDE_DOWN
+    texcoord.y = 1.0 - texcoord.y;
+    #endif
+    #if RESHADE_DEPTH_INPUT_IS_MIRRORED
+            texcoord.x = 1.0 - texcoord.x;
+    #endif
+    texcoord.x /= RESHADE_DEPTH_INPUT_X_SCALE;
+    texcoord.y /= RESHADE_DEPTH_INPUT_Y_SCALE;
+    #if RESHADE_DEPTH_INPUT_X_PIXEL_OFFSET
+    texcoord.x -= RESHADE_DEPTH_INPUT_X_PIXEL_OFFSET * BUFFER_RCP_WIDTH;
+    #else
+    texcoord.x -= RESHADE_DEPTH_INPUT_X_OFFSET / 2.000000001;
+    #endif
+    #if RESHADE_DEPTH_INPUT_Y_PIXEL_OFFSET
+    texcoord.y += RESHADE_DEPTH_INPUT_Y_PIXEL_OFFSET * BUFFER_RCP_HEIGHT;
+    #else
+    texcoord.y += RESHADE_DEPTH_INPUT_Y_OFFSET / 2.000000001;
+    #endif
+    float4 depth = tex2DgatherR(s, texcoord) * RESHADE_DEPTH_MULTIPLIER;
+    
+    #if RESHADE_DEPTH_INPUT_IS_LOGARITHMIC
+    const float C = 0.01;
+    depth = (exp(depth * log(C + 1.0)) - 1.0) / C;
+    #endif
+    #if RESHADE_DEPTH_INPUT_IS_REVERSED
+    depth = 1.0 - depth;
+    #endif
+    const float N = 1.0;
+    depth /= RESHADE_DEPTH_LINEARIZATION_FAR_PLANE - depth * (RESHADE_DEPTH_LINEARIZATION_FAR_PLANE - N);
+    
+    return depth;
+}
 
 float4 atrous(sampler input, float2 texcoord, float level) {
 	float4 noisy = tex2D(input, texcoord);
@@ -193,7 +189,7 @@ float4 atrous(sampler input, float2 texcoord, float level) {
 	}
 	return sum/cum_w;
 }
-
+// Optimization is fun asf.
 texture minZ { Width = BUFFER_WIDTH / 2; Height = BUFFER_HEIGHT / 2; Format = R16; };
 sampler sminZ { Texture = minZ; 
 	MagFilter = POINT;
@@ -204,6 +200,13 @@ sampler sminZ2 { Texture = minZ2;
 	MagFilter = POINT;
 	MinFilter = POINT;
 	MipFilter = POINT; };
+texture minZ3 { Width = BUFFER_WIDTH / 8; Height = BUFFER_HEIGHT / 8; Format = R16; };
+sampler sminZ3 { Texture = minZ3; 
+	MagFilter = POINT;
+	MinFilter = POINT;
+	MipFilter = POINT; };
+	
+	
 sampler lowN { Texture = zfw::tLowNormal;
 	MagFilter = POINT;
 	MinFilter = POINT;
@@ -255,14 +258,25 @@ float4 JointBilateralUpsample(
    return BilateralSum / WeightSum;
 }
 
+//                    VPOS (pixcoords), distance
+float getAdaptiveRes(float2 samplePos, float t) {
+	float res = 0;
+	
+	if (t < sampleQThresh1) {
+		res = tex2Dfetch(sminZ, samplePos).x;
+	} else {
+		res = tex2Dfetch(sminZ3, samplePos * .25).x;
+	}
+	
+	return res;
+}
+
 uint sliceSteps(float3 positionVS, float3 V, float2 start, float2 rayDir, float t, float step, float samplingDirection, float N, uint bitfield) {
     for (uint i = 0; i < SCVBAO_STEPS; i++, t += step) {
         float2 samplePos = clamp(start + t * rayDir, 1, BUFFER_SCREEN_SIZE - 2);
         samplePos = floor(samplePos) + 0.5;
         float2 samplePosUV = samplePos.xy / BUFFER_SCREEN_SIZE * 2;
-        float depth;
-        if (SCVBAO_USE_QUATERRES_DEPTH) depth = tex2Dfetch(sminZ2, samplePos / 2).r;
-        if (!SCVBAO_USE_QUATERRES_DEPTH) depth = tex2Dfetch(sminZ, samplePos).r;
+        float depth = getAdaptiveRes(samplePos, t);
         float3 samplePosVS = zfw::uvzToView(samplePosUV, depth);
         float3 delta = samplePosVS - positionVS;
 	
@@ -294,7 +308,7 @@ float gtao(float2 uv, float2 vpos) {
 	float3 normalVS = zfw::getNormal(uv);
 	positionVS += 0.04 * normalVS * length(positionVS);
 	
-    float step = max(1.0, clamp(R / positionVS.z, SCVBAO_STEPS, R_MAX_CLAMP) / (SCVBAO_STEPS + 1.0));
+    float step = max(1.0, clamp(R / positionVS.z, SCVBAO_STEPS, R * 2) / (SCVBAO_STEPS + 1.0));
 		
 	for(float slice = 0.0; slice < 1.0; slice += 1.0 / SCVBAO_SLICES) {
 		float phi = PI * frac(slice + random.x);
@@ -322,12 +336,17 @@ float gtao(float2 uv, float2 vpos) {
 
 
 float prepMinZ __PXSDECL__ {
-	float4 z4 = GatherLinDepth(uv);
+	float4 z4 = GatherLinDepth(uv, ReShade::DepthBuffer);
 	return min(min(z4.x, z4.y), min(z4.z, z4.w));
 }
 
 float prepMinZ2 __PXSDECL__ {
-	float4 z4 = GatherLinDepth(uv);
+	float4 z4 = tex2DgatherR(sminZ, uv);
+	return min(min(z4.x, z4.y), min(z4.z, z4.w));
+}
+
+float prepMinZ3 __PXSDECL__ {
+	float4 z4 = tex2DgatherR(sminZ2, uv);
 	return min(min(z4.x, z4.y), min(z4.z, z4.w));
 }
 
@@ -363,13 +382,16 @@ technique SCAO {
 		PixelShader = prepMinZ;
 		RenderTarget = minZ;
 	}
-	#if SCVBAO_USE_QUATERRES_DEPTH
 	pass Prepz2 {
 		VertexShader = PostProcessVS;
 		PixelShader = prepMinZ2;
 		RenderTarget = minZ2;
 	}
-	#endif
+	pass Prepz3 {
+		VertexShader = PostProcessVS;
+		PixelShader = prepMinZ3;
+		RenderTarget = minZ3;
+	}
 	pass Main { 
 		VertexShader = PostProcessVS;
 		PixelShader = main;

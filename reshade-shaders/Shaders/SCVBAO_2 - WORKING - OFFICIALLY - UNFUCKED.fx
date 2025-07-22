@@ -21,7 +21,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.*/
 
 #include "ReShade.fxh"
-#define zfw Zenteon 
 #include "soupcan_includes/FrameworkResources.fxh"
 
 #ifndef PI
@@ -80,11 +79,15 @@ uniform float2 offset[25] <hidden = true;> = {
 };
 
 #ifndef SCVBAO_SLICES
-	#define SCVBAO_SLICES 4
+	#define SCVBAO_SLICES 3
 #endif
 
 #ifndef SCVBAO_STEPS
-		#define SCVBAO_STEPS 7
+		#define SCVBAO_STEPS 10
+#endif
+
+#ifndef SCVBAO_USE_QUATERRES_DEPTH
+		#define SCVBAO_USE_QUATERRES_DEPTH 1
 #endif
 
 #define SECTORS 32
@@ -196,6 +199,11 @@ sampler sminZ { Texture = minZ;
 	MagFilter = POINT;
 	MinFilter = POINT;
 	MipFilter = POINT; };
+texture minZ2 { Width = BUFFER_WIDTH / 4; Height = BUFFER_HEIGHT / 4; Format = R16; };
+sampler sminZ2 { Texture = minZ2; 
+	MagFilter = POINT;
+	MinFilter = POINT;
+	MipFilter = POINT; };
 sampler lowN { Texture = zfw::tLowNormal;
 	MagFilter = POINT;
 	MinFilter = POINT;
@@ -252,7 +260,10 @@ uint sliceSteps(float3 positionVS, float3 V, float2 start, float2 rayDir, float 
         float2 samplePos = clamp(start + t * rayDir, 1, BUFFER_SCREEN_SIZE - 2);
         samplePos = floor(samplePos) + 0.5;
         float2 samplePosUV = samplePos.xy / BUFFER_SCREEN_SIZE * 2;
-        float3 samplePosVS = zfw::uvzToView(samplePosUV, tex2D(sminZ, samplePosUV).r);
+        float depth;
+        if (SCVBAO_USE_QUATERRES_DEPTH) depth = tex2Dfetch(sminZ2, samplePos / 2).r;
+        if (!SCVBAO_USE_QUATERRES_DEPTH) depth = tex2Dfetch(sminZ, samplePos).r;
+        float3 samplePosVS = zfw::uvzToView(samplePosUV, depth);
         float3 delta = samplePosVS - positionVS;
 	
 	    float2 fb = acos(float2(dot(normalize(delta), V), dot(normalize(delta + THICKNESS * normalize(samplePosVS)), V)));
@@ -275,13 +286,14 @@ float gtao(float2 uv, float2 vpos) {
 	float2 start = vpos;
 	float depth = tex2D(sminZ, uv).r;
 	float3 positionVS = zfw::uvzToView(uv, depth);
-	positionVS.z *= 0.9999; // Move center pixel towards camera a bit.
+	
 
 	float ao = 0.0;
 	
 	float3 V = normalize(-positionVS);
 	float3 normalVS = zfw::getNormal(uv);
-
+	positionVS += 0.04 * normalVS * length(positionVS);
+	
     float step = max(1.0, clamp(R / positionVS.z, SCVBAO_STEPS, R_MAX_CLAMP) / (SCVBAO_STEPS + 1.0));
 		
 	for(float slice = 0.0; slice < 1.0; slice += 1.0 / SCVBAO_SLICES) {
@@ -310,6 +322,11 @@ float gtao(float2 uv, float2 vpos) {
 
 
 float prepMinZ __PXSDECL__ {
+	float4 z4 = GatherLinDepth(uv);
+	return min(min(z4.x, z4.y), min(z4.z, z4.w));
+}
+
+float prepMinZ2 __PXSDECL__ {
 	float4 z4 = GatherLinDepth(uv);
 	return min(min(z4.x, z4.y), min(z4.z, z4.w));
 }
@@ -346,6 +363,13 @@ technique SCAO {
 		PixelShader = prepMinZ;
 		RenderTarget = minZ;
 	}
+	#if SCVBAO_USE_QUATERRES_DEPTH
+	pass Prepz2 {
+		VertexShader = PostProcessVS;
+		PixelShader = prepMinZ2;
+		RenderTarget = minZ2;
+	}
+	#endif
 	pass Main { 
 		VertexShader = PostProcessVS;
 		PixelShader = main;

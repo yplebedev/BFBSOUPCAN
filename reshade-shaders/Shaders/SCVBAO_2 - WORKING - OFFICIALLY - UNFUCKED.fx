@@ -194,17 +194,24 @@ texture minZ { Width = BUFFER_WIDTH / 2; Height = BUFFER_HEIGHT / 2; Format = R1
 sampler sminZ { Texture = minZ; 
 	MagFilter = POINT;
 	MinFilter = POINT;
-	MipFilter = POINT; };
+	MipFilter = POINT;
+	AddressU = REPEAT;
+	AddressV = REPEAT; };
+	
 texture minZ2 { Width = BUFFER_WIDTH / 4; Height = BUFFER_HEIGHT / 4; Format = R16; };
 sampler sminZ2 { Texture = minZ2; 
 	MagFilter = POINT;
 	MinFilter = POINT;
-	MipFilter = POINT; };
+	MipFilter = POINT;
+	AddressU = REPEAT;
+	AddressV = REPEAT; };
 texture minZ3 { Width = BUFFER_WIDTH / 8; Height = BUFFER_HEIGHT / 8; Format = R16; };
 sampler sminZ3 { Texture = minZ3; 
 	MagFilter = POINT;
 	MinFilter = POINT;
-	MipFilter = POINT; };
+	MipFilter = POINT;
+	AddressU = REPEAT;
+	AddressV = REPEAT; };
 	
 	
 sampler lowN { Texture = zfw::tLowNormal;
@@ -350,10 +357,32 @@ float prepMinZ3 __PXSDECL__ {
 	return min(min(z4.x, z4.y), min(z4.z, z4.w));
 }
 
+
+uniform float rejectNThreshold <ui_type = "slider"; ui_min = 0.; ui_max = 1.; ui_label = "Rejection threshold for normals";> = 0.9;
+uniform float rejectZThreshold <ui_type = "slider"; ui_min = 0.; ui_max = 100.; ui_label = "Rejection threshold for depth";> = 0.9;
+uniform float rejectMove <ui_type = "slider"; ui_min = 0.; ui_max = 1.; ui_label = "Rejection threshold for movement";> = 0.9;
+
+texture prevN { Width = BUFFER_WIDTH / 2; Height = BUFFER_HEIGHT / 2; Format = RGBA16F; };
+sampler sprevN { Texture = prevN; 
+	MagFilter = POINT;
+	MinFilter = POINT;
+	MipFilter = POINT; };
+	
+texture prevD { Width = BUFFER_WIDTH / 2; Height = BUFFER_HEIGHT / 2; Format = R16; };
+sampler sprevD { Texture = prevD; 
+	MagFilter = POINT;
+	MinFilter = POINT;
+	MipFilter = POINT; };
+	
 float4 main __PXSDECL__ {
 	float ao = pow(gtao(uv, vpos.xy), 1);
 	const float3 mv = zfw::getVelocity(uv);
-	ao = lerp(ao, tex2D(sAO3, uv + mv.xy).x, 0.8 * mv.z);
+	
+	bool keepByNorm = dot(tex2D(sprevN, uv + mv.xy).rgb, zfw::sampleNormal(uv, 0)) > rejectNThreshold;
+	//bool keepByZ = distance(tex2D(sprevD, uv + mv.xy), zfw::sampleDepth(uv, 0)) > rejectZThreshold;
+	bool keepByLength = length(mv.xy) > rejectMove; 
+	
+	ao = lerp(ao, tex2D(sAO3, uv + mv.xy).x, 0.8 * mv.z * keepByNorm * keepByLength);
 	return float4(ao, ao, ao, 1.0);
 }
 
@@ -372,8 +401,16 @@ float4 denoise2 __PXSDECL__ {
 
 float4 upscale __PXSDECL__ {
 	const float3 hdr = zfw::toneMapInverse(tex2Dfetch(ReShade::BackBuffer, vpos.xy).rgb, 15.0);
-	return JointBilateralUpsample(sAO1, lowN, highN, uv).xxxx;
-	//return float4(zfw::toneMap(JointBilateralUpsample(sAO2, lowN, highN, uv).xxx * hdr, 15.0), 1.0);
+	if (debug) return JointBilateralUpsample(sAO1, lowN, highN, uv).xxxx;
+	return float4(zfw::toneMap(JointBilateralUpsample(sAO2, lowN, highN, uv).xxx * hdr, 15.0), 1.0);
+}
+
+float4 reprojN __PXSDECL__ {
+	return float4(zfw::sampleNormal(uv, 0), 1.0);
+}
+
+float reprojD __PXSDECL__ {
+	return zfw::sampleDepth(uv, 0);
 }
 
 technique SCAO {
@@ -415,5 +452,15 @@ technique SCAO {
 	pass Upscale {
 		VertexShader = PostProcessVS;
 		PixelShader = upscale;
+	}
+	pass SaveN {
+		VertexShader = PostProcessVS;
+		PixelShader = reprojN;
+		RenderTarget = prevN;
+	}
+	pass SaveZ {
+		VertexShader = PostProcessVS;
+		PixelShader = reprojD;
+		RenderTarget = prevD;
 	}
 }

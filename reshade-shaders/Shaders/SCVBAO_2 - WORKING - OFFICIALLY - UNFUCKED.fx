@@ -283,6 +283,11 @@ uint sliceSteps(float3 positionVS, float3 V, float2 start, float2 rayDir, float 
         float2 samplePos = clamp(start + t * rayDir, 1, BUFFER_SCREEN_SIZE - 2);
         samplePos = floor(samplePos) + 0.5;
         float2 samplePosUV = samplePos.xy / BUFFER_SCREEN_SIZE * 2;
+        
+        float2 range = saturate(samplePosUV * samplePosUV - samplePosUV);
+		bool is_outside = range.x != -range.y; //and of course if we are not inside we are outside. 	
+    	if (is_outside) break;
+        
         float depth = getAdaptiveRes(samplePos, t);
         float3 samplePosVS = zfw::uvzToView(samplePosUV, depth);
         float3 delta = samplePosVS - positionVS;
@@ -394,14 +399,9 @@ float4 denoise1 __PXSDECL__ {
 	return atrous(sAO1, uv, 0).xxxx;
 }
 
-float4 denoise2 __PXSDECL__ {
-	return atrous(sAO2, uv, 1).xxxx;
-}
-
-
 float4 upscale __PXSDECL__ {
 	const float3 hdr = zfw::toneMapInverse(tex2Dfetch(ReShade::BackBuffer, vpos.xy).rgb, 15.0);
-	if (debug) return JointBilateralUpsample(sAO1, lowN, highN, uv).xxxx;
+	if (debug) return JointBilateralUpsample(sAO2, lowN, highN, uv).xxxx;
 	return float4(zfw::toneMap(JointBilateralUpsample(sAO2, lowN, highN, uv).xxx * hdr, 15.0), 1.0);
 }
 
@@ -443,11 +443,6 @@ technique SCAO {
 		VertexShader = PostProcessVS;
 		PixelShader = denoise1;
 		RenderTarget = AO2;
-	}
-	pass Denoise2 {
-		VertexShader = PostProcessVS;
-		PixelShader = denoise2;
-		RenderTarget = AO1;
 	}
 	pass Upscale {
 		VertexShader = PostProcessVS;

@@ -21,7 +21,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.*/
 
 #include "ReShade.fxh"
-#define zfw Zenteon 
 #include "soupcan_includes/FrameworkResources.fxh"
 
 #ifndef PI
@@ -141,6 +140,7 @@ float2 stbn(float2 p) {
 namespace stepData {
 	struct stepData {
 		uint bitfield;
+		uint AObitfield;
 		float3 lighting;	
 	};
 	float3 getLighting(stepData sd) {
@@ -186,7 +186,7 @@ stepData::stepData sliceSteps(float3 positionVS, float3 V, float2 start, float2 
 	    float2 fb = acos(float2(dot(normalize(delta), V), dot(normalize(delta + THICKNESS * normalize(samplePosVS)), V)));
 	    fb = saturate(((samplingDirection * -fb) - N + PI/2) / PI);
 	    fb = fb.x > fb.y ? fb.yx : fb;
-	    fb = smoothstep(0., 1., fb); // cosine lobe for AO. look: cdf.
+	    //fb = smoothstep(0., 1., fb); // cosine lobe for AO. look: cdf.
 	    
    	 uint a = round(fb.x * SECTORS);
     	uint b = round((fb.y - fb.x) * SECTORS);
@@ -196,7 +196,6 @@ stepData::stepData sliceSteps(float3 positionVS, float3 V, float2 start, float2 
     	
     	data.lighting += calculateIL(prevBF, data.bitfield, V, normal, zfw::getNormal(sampleUV), delta, sampleUV, start / BUFFER_SCREEN_SIZE, samplePosVS) * sampleLength * sampleLength;
     }
-    data.lighting *= 9.0;
     return data;
 }
 
@@ -268,8 +267,8 @@ float4 denoise1(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
 
 float3 blend(float4 vpos : SV_Position, float2 uv : TEXCOORD) : SV_Target {
 	float4 gi = tex2D(sGI, uv);
-	return zfw::toneMap((gi.rgb + gi.a * 0.001) * strength, 20.0);
-	//return zfw::toneMap((gi.rgb + gi.a * 0.001) * strength * zfw::getAlbedo(uv) + zfw::toneMapInverse(tex2D(ReShade::BackBuffer, uv).rgb, 20.0), 20.0);
+	if (debug) return zfw::toneMap((gi.rgb + gi.a * 0.001) * strength, 20.0);
+	return zfw::toneMap((gi.rgb + gi.a * 0.001) * strength * zfw::getAlbedo(uv) + zfw::toneMapInverse(tex2D(ReShade::BackBuffer, uv).rgb, 20.0), 20.0);
 }
 
 technique SCGI {

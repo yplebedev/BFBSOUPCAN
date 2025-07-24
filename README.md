@@ -46,19 +46,6 @@ This will be quite brief as the implementation has a lot of details that will pe
 This follows the standard slice formulation, splooshing the integration dimention, that speeds up integration, lowers the amount of wasted memory fetches and improves the manifestation or blue noise in the final result. The difference between this technique and GTAO primarily boils down to the fact, that GTAO only really bothers with two angles to represent and entire plane's worth of geometry. This (in GTAO) leads to overoccludion behind close-by objects. Visibility bitmasking instead stores a bitmask, a field of 32 directions, either occluded or not. This allows to assume thickness, and have each step occlude a handful of directions at once. The resulting occlusion is calculated via a countbits() call, and, while being much harder to work with and a notch slower, the end result behaves much more reasonably, in my opinion.
 The final image is computed by denoising and upscaling, as the entire image is generated in halfres. A joint bilateral filter is used for both. 
 
-HOW TO USE:
-1. Enable the shader and Zenteon: Framework, and put them in the correct order (first, framework, then AO).
-2. Open the shader FX, and remove the "#define zfw Zenteon", as it **will not compile as-is**.
-3. Ensure your depth is set up correctly, use DisplayDepth to debug it.
-4. Go into debug view and max out strength.
-5. In framework, enable process normals and tweak the texture strength until a reasonable detail level is reached.
-6. (FOR ADVANCED USER ONLY - this will probably be exposed in the form of a setting) Open the shader file and find the radius, thickness settings.
-7. Set the radius to something larger or smaller, but within the range of the image resolution. Set the radius clamp a notch higher then radius.
-8. Set the thickness as low as possible without removing occlusion entirely, but generally this boils down to taste.
-9. Set the slices based of frametime and noise levels. Check the noise level withpout the debug view, too!
-10. Set the steps as you really feel like it. The first 10 or so steps will add more frametime, but it could reasonably be set quite high on certain systems. More steps = more detailed occlusion.
-11. Disable the debug view
-12. Profit.
 
 
 

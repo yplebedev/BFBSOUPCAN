@@ -48,7 +48,9 @@ The final image is computed by denoising and upscaling, as the entire image is g
 
 HOW TO USE:
   Step 1: Enable the shader and ZenteonFramework. Put framework before SCAO.
+  
   Step 2: Adjust radius.
+  
   Step 3: Profit.
 
 

@@ -165,7 +165,7 @@ float3 calculateIL(uint prevBF, uint currBF, float3 positionVS, float3 nF, float
 	float rxW = saturate(dot(normalize(delta), nF)); // light comes in, this weights how much of that incoming light would bounce the the viewer.
 	float reflW = saturate(dot(-normalize(delta), nS)); // how much light reflects into the shaded pixel.
 	
-	return deltaBF * rxW * reflW * di * dist / lengthS; // shadow * step->fragment * fragment->viewer * emmision * 2D distance (further away samples account for a higher area of the circle) * inverse-square
+	return deltaBF * rxW * reflW * di * dist / lengthS; // shadow * step->fragment * fragment->viewer * emmision * probability correction, adds noise far away * inverse-square
 }
 
 stepData::stepData sliceSteps(float3 positionVS, float3 V, float2 start, float2 rayDir, float t, float step, float samplingDirection, float N, float3 normal, uint bitfield) {
@@ -199,7 +199,7 @@ stepData::stepData sliceSteps(float3 positionVS, float3 V, float2 start, float2 
     	uint prevBF = data.bitfield;
     	data.bitfield |= ((1 << b) - 1) << a; 
     	
-    	data.lighting += calculateIL(prevBF, data.bitfield, V, normal, zfw::getNormal(sampleUV), delta, sampleUV, start / BUFFER_SCREEN_SIZE, samplePosVS) * sampleLength * sampleLength; // and debias by the distance squared
+    	data.lighting += calculateIL(prevBF, data.bitfield, V, normal, zfw::getNormal(sampleUV), delta, sampleUV, start / BUFFER_SCREEN_SIZE, samplePosVS) * sampleLength * sampleLength; // and debias by the distance^4
     }
     return data;
 }

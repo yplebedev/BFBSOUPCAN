@@ -151,16 +151,21 @@ namespace stepData {
 	}
 }
 
+// I know I'll (or someone else) will look at this code
+// to -steal- learn from, so have some pointers as to why
+// each (debias or otherwise) step is there.
+// This code assumes lambertian diffuse, but technically it could be extended to specular, or any other lobe. At the cost of nosie,
+// since IS is hard for bitmasks, you'll get horrible nosie for tight lobes.
 float3 calculateIL(uint prevBF, uint currBF, float3 positionVS, float3 nF, float3 nS, float3 delta, float2 uv, float2 uvF, float3 samplePosVS) {
-	float lengthS = dot(delta, delta) + exp2(-32);
+	float lengthS = dot(delta, delta) + exp2(-32); // this +2e-32 step might not make sense, but since we correct by 2D dist, this is actually more correct
 	float dist = dot(samplePosVS, samplePosVS);
-	float3 di = tex2Dlod(sIrradiance, float4(uv, 0., 0.)).rgb;
+	float3 di = tex2Dlod(sIrradiance, float4(uv, 0., 0.)).rgb; // theoretically the light, but BackBuf works fine, and is best we got.
 	
-	float deltaBF = ((float)countbits(currBF & ~prevBF)) / SECTORS;
-	float rxW = saturate(dot(normalize(delta), nF));
-	float reflW = saturate(dot(-normalize(delta), nS));
+	float deltaBF = ((float)countbits(currBF & ~prevBF)) / SECTORS; // difference of bitmasks. Gets us shadows, and is the similar to HBIL's weighting by the angle diff.
+	float rxW = saturate(dot(normalize(delta), nF)); // light comes in, this weights how much of that incoming light would bounce the the viewer.
+	float reflW = saturate(dot(-normalize(delta), nS)); // how much light reflects into the shaded pixel.
 	
-	return deltaBF * rxW * reflW * di * dist / lengthS;
+	return deltaBF * rxW * reflW * di * dist / lengthS; // shadow * step->fragment * fragment->viewer * emmision * 2D distance (further away samples account for a higher area of the circle) * inverse-square
 }
 
 stepData::stepData sliceSteps(float3 positionVS, float3 V, float2 start, float2 rayDir, float t, float step, float samplingDirection, float N, float3 normal, uint bitfield) {
@@ -171,7 +176,7 @@ stepData::stepData sliceSteps(float3 positionVS, float3 V, float2 start, float2 
 	[loop]
     for (uint i = 0; i < SCVBAO_STEPS; i++) {
     	float sampleLength = (t + i) / SCVBAO_STEPS;
-    	sampleLength *= sampleLength;
+    	sampleLength *= sampleLength; // sample more closer.
     	float2 sampleUV = rayDir * sampleLength + start / BUFFER_SCREEN_SIZE;
         //float2 samplePos = clamp(start + t * rayDir, 1, BUFFER_SCREEN_SIZE - 2);
         //samplePos = floor(samplePos) + 0.5;
@@ -194,7 +199,7 @@ stepData::stepData sliceSteps(float3 positionVS, float3 V, float2 start, float2 
     	uint prevBF = data.bitfield;
     	data.bitfield |= ((1 << b) - 1) << a; 
     	
-    	data.lighting += calculateIL(prevBF, data.bitfield, V, normal, zfw::getNormal(sampleUV), delta, sampleUV, start / BUFFER_SCREEN_SIZE, samplePosVS) * sampleLength * sampleLength;
+    	data.lighting += calculateIL(prevBF, data.bitfield, V, normal, zfw::getNormal(sampleUV), delta, sampleUV, start / BUFFER_SCREEN_SIZE, samplePosVS) * sampleLength * sampleLength; // and debias by the distance squared
     }
     return data;
 }
